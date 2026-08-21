@@ -71,7 +71,7 @@
     "  border:1px solid var(--pc-border); border-radius:9px; padding:8px 10px; font-size:13px; width:100%;",
     "  box-sizing:border-box; outline:none; }",
     "[data-pokechat] .pc-input:focus, [data-pokechat] .pc-textarea:focus { border-color: var(--pc-primary); }",
-    "[data-pokechat] .pc-modal { position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,.55);",
+    "[data-pokechat] .pc-modal { position:fixed; inset:0; z-index:2147483000; background:rgba(0,0,0,.55);",
     "  display:flex; align-items:center; justify-content:center; padding:20px; }",
     "[data-pokechat] .hidden { display:none !important; }",
     "[data-pokechat] .pc-badge { border-radius:6px; padding:1px 6px; font-size:10px; font-weight:700; }",
@@ -209,7 +209,7 @@
 
     var wrap = el("div", null);
     wrap.setAttribute("data-pokechat", "");
-    wrap.style.cssText = "position:fixed;bottom:80px;left:16px;z-index:99990;display:flex;flex-direction:column;align-items:flex-start;gap:8px;";
+    wrap.style.cssText = "position:fixed;bottom:80px;left:16px;z-index:2147483000;display:flex;flex-direction:column;align-items:flex-start;gap:8px;";
 
     // 任务按钮（上）——轮询时显示
     var taskBtn = el("button", "pc-btn pc-glass hidden", "任务（0）");
@@ -447,7 +447,7 @@
   function toast(msg) {
     var t = el("div", "pc-glass", null);
     t.setAttribute("data-pokechat", "");
-    t.style.cssText = "position:fixed;bottom:140px;left:50%;transform:translateX(-50%);z-index:99999;padding:8px 16px;font-size:13px;background:rgba(17,28,46,.92);";
+    t.style.cssText = "position:fixed;bottom:140px;left:50%;transform:translateX(-50%);z-index:2147483000;padding:8px 16px;font-size:13px;background:rgba(17,28,46,.92);";
     t.textContent = msg;
     document.body.appendChild(t);
     setTimeout(function () { t.remove(); }, 2500);
@@ -471,16 +471,23 @@
     }, 5000);
   }
 
-  /* ================= 初始化 ================= */
+  /* ================= 初始化（兼容第三方项目：DOM 未就绪时等待，2026-08-22） ================= */
+  function doInit(config) {
+    cfg = Object.assign({ endpoint: DEFAULT_ENDPOINT }, config || {});
+    loadQueue();
+    buildUI();
+    renderFloating();
+    refreshStatus();
+    startTaskPolling();
+    setInterval(function () { refreshStatus(); }, 10000);
+  }
   global.PokeChat = {
     init: function (config) {
-      cfg = Object.assign({ endpoint: DEFAULT_ENDPOINT }, config || {});
-      loadQueue();
-      buildUI();
-      renderFloating();
-      refreshStatus();
-      startTaskPolling();
-      setInterval(function () { refreshStatus(); }, 10000);
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", function () { doInit(config); });
+      } else {
+        doInit(config);
+      }
     },
     open: function () { qOpen = true; renderQueueDialog(); },
   };

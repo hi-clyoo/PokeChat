@@ -98,6 +98,23 @@ PokeChat 前端 + 后端负责「收集反馈」；**真正处理反馈的是 AI
 
 > 纯前端（不配 endpoint）时没有 AI 处理端，反馈只保存在 localStorage，属于"记录模式"。
 
+## 🔧 第三方项目接入 FAQ / 排查
+
+| 现象 | 原因 / 排查 |
+|---|---|
+| **UI 显示不对**（弹窗/按钮样式被改） | 项目 CSS 覆盖了 PokeChat 样式。PokeChat 所有类带 `pc-` 前缀且选择器用 `[data-pokechat]` 提升优先级；z-index 用 2147483000（最高层）。若仍被覆盖：检查项目是否有全局 `* { ... }` reset 或 transform/filter 创建了新的层叠上下文 |
+| **快捷键（Ctrl+F / Enter）不生效** | 1) 项目全局 keydown 拦截并 `stopPropagation`——PokeChat 在 document capture 阶段监听，若项目在 window 级拦截可能失效；2) 页面在 **iframe / Web Components Shadow DOM** 内——document 级监听收不到内部事件；3) 焦点在项目自己的输入框时，PokeChat 的 Enter 只对弹窗内输入框生效 |
+| **点击发送 / 直接发送无效** | 1) 未配置 `endpoint` 时是**本地模式**：反馈只写入 localStorage（打开反馈队列可见），不会真的发送——要 AI 处理必须配 endpoint + AI loop；2) 配了 endpoint：检查浏览器控制台 Network 里 POST `/api/feedback` 是否 200（CORS 需服务端允许跨域，本项目 server.py 已带 `Access-Control-Allow-Origin: *`）；3) 按钮被项目 CSS 遮住（z-index 低于项目元素） |
+| **无 AI 回复（一直等待调度）** | **PokeChat 前端只负责收集，处理需要 AI agent loop**（Claude Code 或任意 LLM 工作流轮询 `/api/feedback/status` 处理）——详见下方「AI 处理端接入」。纯前端（无 endpoint）模式下没有 AI，属"记录模式" |
+| **悬浮按钮不显示** | 检查是否在 iframe/shadow DOM 内（PokeChat 注入 `document.body`，iframe 内互不可见）；或项目 `body` 未就绪时调用 `init`（新版已自动等待 DOMContentLoaded） |
+
+**接入检查清单**：
+1. `PokeChat.init({ endpoint })` 在 DOM 就绪后调用（或直接调，新版自动等待）
+2. 控制台确认无 JS 报错
+3. 点 🎯 进入选择模式 → 悬停出现虚线高亮（**若没有：页面在 iframe/Shadow DOM 内**，需把 PokeChat 脚本也放进该容器）
+4. 点组件弹备注 → Enter 加入队列（**若 Enter 无效：焦点在别处**，点一下输入框内再按）
+5. 配了 endpoint 时点发送 → Network 里应有 POST → 状态变"等待调度"（**若没有 AI loop：一直等待，属正常**）
+
 ## ⚙️ 配置
 
 | 配置 | 默认 | 说明 |
