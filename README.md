@@ -61,8 +61,42 @@ python3 server.py          # http://127.0.0.1:8123
 |---|---|---|
 | `/api/feedback` | POST | `{items:[{path,selector,text,note}]}` 批量提交，落盘 `data/` |
 | `/api/feedback/status` | GET | `{pending,processing,done}` 状态（done 条目带 `conclusion` 回复） |
+| `/api/feedback/<ts>/conclusion` | POST | AI 处理端回写结论 `{conclusion:"..."}` |
 
-AI 处理端可轮询 `/api/feedback/status` 取 `pending`，处理完把文件移到 `processing/` → 加 `conclusion` → 移到 `done/`（前端对话面板自动显示）。
+## 🤖 AI 处理端（agent / loop）接入
+
+PokeChat 前端 + 后端负责「收集反馈」；**真正处理反馈的是 AI agent**（可以是 Claude Code、任意 LLM 工作流）。闭环需要三步：
+
+```
+用户提交 → 后端落盘(data/*.json, pending) → AI agent 轮询取到
+→ 处理（改代码/回答问题）→ 回写 conclusion → 前端对话面板显示回复
+```
+
+**方式一：Claude Code（推荐，本项目的标准用法）**
+
+开启一个每分钟的 loop 任务（`/loop 1m` 或定时任务），prompt 用：
+
+```text
+检查 PokeChat 反馈：ls data/*.json（根目录，不含子目录）。
+如有新反馈：
+1. mkdir -p data/processing && mv data/*.json data/processing/
+2. 读取每条（path/selector/text/note——用户点选的组件 + 备注）
+3. 根据备注定位组件源码并实施修改
+4. 处理完：把文件移到 data/done/，并给该文件追加 conclusion 字段
+   （内容 = 对用户的完整回复，多行原样保存）
+若无新反馈，简短确认即可。
+```
+
+文件状态约定（前端对话面板据此显示）：
+- `data/*.json` = 等待调度（pending）
+- `data/processing/*.json` = 处理中
+- `data/done/*.json` = 已完成（带 `conclusion` = AI 回复全文）
+
+**方式二：任意 AI 服务 / 脚本**
+
+轮询 `GET /api/feedback/status` 取 `pending` → 处理 → `POST /api/feedback/<ts>/conclusion` 回写结论 → 把文件移到 `done/`（本地部署直接操作文件，远程部署用接口 + 状态流转）。
+
+> 纯前端（不配 endpoint）时没有 AI 处理端，反馈只保存在 localStorage，属于"记录模式"。
 
 ## ⚙️ 配置
 

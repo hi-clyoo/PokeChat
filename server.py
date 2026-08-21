@@ -79,14 +79,31 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        if urlparse(self.path).path != "/api/feedback":
-            self._send(404, {"error": "not found"})
-            return
+        path = urlparse(self.path).path
         try:
             n = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
         except Exception as e:
             self._send(400, {"error": str(e)})
+            return
+
+        # AI 处理端回写结论：POST /api/feedback/<ts>/conclusion {conclusion: "..."}
+        if path.startswith("/api/feedback/") and path.endswith("/conclusion"):
+            ts = path.split("/")[3]
+            fp = os.path.join(DATA, f"{ts}.json")
+            if not os.path.isfile(fp):
+                self._send(404, {"error": "not found: " + ts})
+                return
+            with open(fp, encoding="utf-8") as fh:
+                rec = json.load(fh)
+            rec["conclusion"] = body.get("conclusion", "")
+            with open(fp, "w", encoding="utf-8") as fh:
+                json.dump(rec, fh, ensure_ascii=False)
+            self._send(200, {"ok": True, "ts": ts})
+            return
+
+        if path != "/api/feedback":
+            self._send(404, {"error": "not found"})
             return
         saved = []
         for it in body.get("items", []):
