@@ -61,7 +61,7 @@ python3 server.py          # http://127.0.0.1:8123
 |---|---|---|
 | `/api/feedback` | POST | `{items:[{path,selector,text,note}]}` 批量提交，落盘 `data/` |
 | `/api/feedback/status` | GET | `{pending,processing,done}` 状态（done 条目带 `conclusion` 回复） |
-| `/api/feedback/<ts>/conclusion` | POST | AI 处理端回写结论 `{conclusion:"..."}` |
+| `/api/feedback/<ts>/conclusion` | POST | AI 处理端回写结论 `{conclusion:"..."}`，自动移入 `done/`（pending/processing/done 位置均可回写） |
 
 ## 🤖 AI 处理端（agent / loop）接入
 
@@ -94,7 +94,7 @@ PokeChat 前端 + 后端负责「收集反馈」；**真正处理反馈的是 AI
 
 **方式二：任意 AI 服务 / 脚本**
 
-轮询 `GET /api/feedback/status` 取 `pending` → 处理 → `POST /api/feedback/<ts>/conclusion` 回写结论 → 把文件移到 `done/`（本地部署直接操作文件，远程部署用接口 + 状态流转）。
+轮询 `GET /api/feedback/status` 取 `pending` → 处理 → `POST /api/feedback/<ts>/conclusion` 回写结论（接口自动把文件移入 `done/`，完成状态流转）。
 
 > 纯前端（不配 endpoint）时没有 AI 处理端，反馈只保存在 localStorage，属于"记录模式"。
 

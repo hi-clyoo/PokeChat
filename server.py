@@ -5,6 +5,7 @@
 接口：
   POST /api/feedback            {items:[{path,selector,text,note}]} → 落盘
   GET  /api/feedback/status     {pending,processing,done}（含 conclusion 回复）
+  POST /api/feedback/<ts>/conclusion  {conclusion:"..."} → 回写结论并自动移入 done/
   GET  /                        Demo 页（静态文件）
 """
 import json
@@ -88,17 +89,27 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         # AI 处理端回写结论：POST /api/feedback/<ts>/conclusion {conclusion: "..."}
+        # 三目录（pending/processing/done）均可回写，成功后自动移入 done/（闭环）
         if path.startswith("/api/feedback/") and path.endswith("/conclusion"):
             ts = path.split("/")[3]
-            fp = os.path.join(DATA, f"{ts}.json")
-            if not os.path.isfile(fp):
+            src = None
+            for sub in ("", "processing", "done"):
+                p = os.path.join(DATA, sub, f"{ts}.json")
+                if os.path.isfile(p):
+                    src = p
+                    break
+            if src is None:
                 self._send(404, {"error": "not found: " + ts})
                 return
-            with open(fp, encoding="utf-8") as fh:
+            with open(src, encoding="utf-8") as fh:
                 rec = json.load(fh)
             rec["conclusion"] = body.get("conclusion", "")
-            with open(fp, "w", encoding="utf-8") as fh:
+            dst = os.path.join(DATA, "done", f"{ts}.json")
+            os.makedirs(os.path.join(DATA, "done"), exist_ok=True)
+            with open(dst, "w", encoding="utf-8") as fh:
                 json.dump(rec, fh, ensure_ascii=False)
+            if src != dst:
+                os.remove(src)
             self._send(200, {"ok": True, "ts": ts})
             return
 
@@ -123,6 +134,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    port = 8123
+    import sys
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8123
     print(f"PokeChat server: http://127.0.0.1:{port}")
     ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
