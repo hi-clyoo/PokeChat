@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PokeChat Demo</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #0b1220; color: #e2e8f0; padding: 40px; }
+    h1 { color: #f1f5f9; }
+    .card { background: #111c2e; border: 1px solid #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    button { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+    button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .note { color: #64748b; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>PokeChat <span style="font-size:14px;color:#64748b">组件选择反馈对话 · Demo</span></h1>
+  <p class="note">
+    左下角 🎯 进入选择模式（悬停虚线高亮 → 点击组件 → 写备注 → 加入队列）。
+    Ctrl+F 快捷开关，右键退出。队列/对话持久化在 localStorage，刷新不丢。
+    <br/>未配置后端 = 本地模式（仅记录）；配了 endpoint 后发送给 AI 并轮询回复。
+  </p>
+
+  <div class="row">
+    <div class="card" style="flex:1">
+      <b>卡片 A</b>
+      <p class="note">试试点选这个卡片、按钮或标题，写个备注加入队列。</p>
+      <button class="primary">主要按钮</button>
+      <button>次要按钮</button>
+    </div>
+    <div class="card" style="flex:1">
+      <b>卡片 B</b>
+      <p class="note">另一个示例组件区域。</p>
+      <p style="color:#94a3b8">一些说明文字……</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <b>表格示例</b>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <tr style="border-bottom:1px solid #1e293b"><th style="text-align:left;padding:6px">名称</th><th style="text-align:left">值</th></tr>
+      <tr style="border-bottom:1px solid #111c2e"><td style="padding:6px">示例行 1</td><td>100</td></tr>
+      <tr><td style="padding:6px">示例行 2</td><td>200</td></tr>
+    </table>
+  </div>
+
+  <!-- 引入 PokeChat（零依赖，直接下载可用） -->
+  <script src="pokechat.js"></script>
+  <script>
+    PokeChat.init({
+      // endpoint: "http://127.0.0.1:8123",  // 可选：配后端后发送给 AI 并显示回复
+    });
+  </script>
+</body>
+</html>
