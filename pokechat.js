@@ -54,20 +54,26 @@
       .then(function (r) { return r.json(); }).then(cb).catch(function () {});
   }
 
-  /* ================= 玻璃风样式（对齐项目版） ================= */
+  /* ================= 玻璃风样式（100% 对齐项目 index.css token，2026-08-22） ================= */
+  // 项目暗色主题：背景 hsl(222 47% 6%)、卡 hsl(222 40% 9%)、主色暖橙红 hsl(15 89% 56%)≈#F35D2B、
+  // glass 渐变 + 发丝边框 + 内高光 + blur(14px) + 圆角 1rem
   var GLASS_CSS = [
-    ":root { --pc-bg:#0b1220; --pc-card:rgba(17,28,46,.72); --pc-border:rgba(148,163,184,.16);",
-    "  --pc-text:#e2e8f0; --pc-muted:#94a3b8; --pc-primary:#3b82f6; --pc-danger:#ef4444;",
-    "  --pc-warn:#f59e0b; --pc-amber:#fbbf24; --pc-green:#34d399; }",
+    ":root { --pc-bg:hsl(222 47% 6%); --pc-card:hsl(222 40% 9%); --pc-card-2:rgba(255,255,255,.06);",
+    "  --pc-border:rgba(255,232,214,.10); --pc-primary:hsl(15 89% 56%);",
+    "  --pc-text:hsl(210 30% 92%); --pc-muted:hsl(215 18% 62%); --pc-muted-2:hsla(215,18%,62%,.5);",
+    "  --pc-danger:hsl(0 74% 60%); --pc-warn:hsl(38 92% 55%); --pc-green:hsl(152 55% 46%);",
+    "  --pc-hi:rgba(255,255,255,.06); --pc-radius:1rem; }",
     "[data-pokechat] { font-family: system-ui, sans-serif; color: var(--pc-text); }",
-    "[data-pokechat] .pc-glass { background: var(--pc-card); border:1px solid var(--pc-border);",
-    "  border-radius:14px; backdrop-filter: blur(14px); box-shadow: 0 12px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05); }",
-    "[data-pokechat] .pc-btn { background: rgba(30,41,59,.6); color: var(--pc-text); border:1px solid var(--pc-border);",
+    "[data-pokechat] .pc-glass { background-image: linear-gradient(162deg, rgba(255,255,255,.055), rgba(255,255,255,.012));",
+    "  border:1px solid var(--pc-border); border-radius:var(--pc-radius);",
+    "  box-shadow: 0 12px 30px rgba(0,0,0,.35), inset 0 1px 0 var(--pc-hi);",
+    "  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }",
+    "[data-pokechat] .pc-btn { background: var(--pc-card-2); color: var(--pc-text); border:1px solid var(--pc-border);",
     "  border-radius:9px; padding:6px 12px; cursor:pointer; font-size:13px; transition: all .15s; }",
-    "[data-pokechat] .pc-btn:hover { background: rgba(51,65,85,.6); }",
-    "[data-pokechat] .pc-btn-primary { background: var(--pc-primary); color:#fff; border-color:transparent; }",
+    "[data-pokechat] .pc-btn:hover { background: rgba(255,255,255,.10); }",
+    "[data-pokechat] .pc-btn-primary { background: var(--pc-primary); color:hsl(222 47% 6%); font-weight:600; border-color:transparent; }",
     "[data-pokechat] .pc-btn-primary:hover { opacity:.9; }",
-    "[data-pokechat] .pc-input, [data-pokechat] .pc-textarea { background: rgba(11,18,32,.7); color: var(--pc-text);",
+    "[data-pokechat] .pc-input, [data-pokechat] .pc-textarea { background: rgba(255,255,255,.04); color: var(--pc-text);",
     "  border:1px solid var(--pc-border); border-radius:9px; padding:8px 10px; font-size:13px; width:100%;",
     "  box-sizing:border-box; outline:none; }",
     "[data-pokechat] .pc-input:focus, [data-pokechat] .pc-textarea:focus { border-color: var(--pc-primary); }",
@@ -76,10 +82,10 @@
     "[data-pokechat] .hidden { display:none !important; }",
     "[data-pokechat] .pc-badge { border-radius:6px; padding:1px 6px; font-size:10px; font-weight:700; }",
     "[data-pokechat] .pc-badge-done { background:rgba(52,211,153,.15); color:var(--pc-green); }",
-    "[data-pokechat] .pc-badge-proc { background:rgba(251,191,36,.15); color:var(--pc-amber); }",
+    "[data-pokechat] .pc-badge-proc { background:rgba(251,191,36,.15); color:var(--pc-warn); }",
     "[data-pokechat] .pc-badge-wait { background:rgba(148,163,184,.15); color:var(--pc-muted); }",
     ".pokechat-picking, .pokechat-picking * { cursor: crosshair !important; }",
-    ".pokechat-picking *:hover { outline:1px dashed rgba(59,130,246,.55) !important; outline-offset:1px; }",
+    ".pokechat-picking *:hover { outline:1px dashed hsl(15 89% 56% / .55) !important; outline-offset:1px; }",
     ".pokechat-picking *:hover:not(:has(*:hover)) { outline:2px solid var(--pc-primary) !important; outline-offset:1px; }",
   ].join("\n");
 
@@ -424,18 +430,18 @@
       wrap.style.marginBottom = "10px";
       var stLabel = st === "done" ? "已完成" : st === "processing" ? "处理中" : "等待";
       var stCls = st === "done" ? "pc-badge-done" : st === "processing" ? "pc-badge-proc" : "pc-badge-wait";
-      // 用户（右）
+      // 用户（右，玻璃白）
       wrap.innerHTML =
         "<div style='display:flex;justify-content:flex-end;'>" +
-        "  <div style='max-width:72%;background:rgba(30,41,59,.55);border:1px solid var(--pc-border);border-radius:12px 12px 2px 12px;padding:8px 11px;font-size:12px;'>" +
+        "  <div style='max-width:72%;background:rgba(255,255,255,.06);border:1px solid var(--pc-border);border-radius:var(--pc-radius) var(--pc-radius) 2px var(--pc-radius);padding:8px 11px;font-size:12px;'>" +
         "    <div style='font-weight:600;'>" + esc(it.text || it.selector) + "</div>" +
         "    <div style='margin-top:2px;color:var(--pc-text);'>" + esc(it.note) + "</div>" +
         "    <span class='pc-badge " + stCls + "' style='margin-top:5px;display:inline-block;'>" + stLabel + "</span>" +
         "  </div>" +
         "</div>" +
-        // AI（左）
+        // AI（左，主色淡橙）
         "<div style='display:flex;justify-content:flex-start;margin-top:5px;'>" +
-        "  <div style='max-width:72%;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);border-radius:12px 12px 12px 2px;padding:8px 11px;font-size:12px;color:var(--pc-text);white-space:pre-wrap;word-break:break-word;'>" +
+        "  <div style='max-width:72%;background:hsl(15 89% 56% / .12);border:1px solid hsl(15 89% 56% / .25);border-radius:var(--pc-radius) var(--pc-radius) var(--pc-radius) 2px;padding:8px 11px;font-size:12px;color:var(--pc-text);white-space:pre-wrap;word-break:break-word;'>" +
         "    <b style='font-size:10px;color:var(--pc-primary);'>AI</b> " + (st === "done" ? esc(it.conclusion || "已处理完成") : st === "processing" ? "处理中…" : "等待调度，1 分钟内开始处理") +
         "  </div>" +
         "</div>";

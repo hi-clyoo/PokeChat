@@ -20,6 +20,69 @@
 | 💬 **对话面板** | IM 式：左 AI 回复（含处理结论）、右用户消息；直接发消息；自动滚动到最新 |
 | 🖥 **极简后端** | 纯 Python 标准库，`python3 server.py` 即可，无任何依赖 |
 
+## 📦 安装指引
+
+### 方式一：script 引入（推荐，零依赖零构建）
+
+```html
+<!-- 放在页面底部 -->
+<script src="pokechat.js"></script>
+<script>
+  PokeChat.init({ endpoint: "http://127.0.0.1:8123" });  // 可选
+</script>
+```
+
+React / Vue 项目同样适用（在 `index.html` 或组件 mount 时引入即可，原生 DOM 实现，不依赖框架）。
+
+### 方式二：后端（可选，需要 AI 回复时）
+
+```bash
+python3 server.py            # 纯标准库，无 pip 依赖，默认 8123 端口
+```
+
+## 🤖 启动 AI loop（让反馈真正被处理）
+
+PokeChat 前端 + 后端只负责「收集反馈」，**必须有一个 AI agent loop 轮询处理**才会回复：
+
+```text
+┌────────┐  POST /api/feedback  ┌────────┐  轮询 status   ┌──────────────┐
+│ 前端页面 │ ──────────────────→ │ 后端落盘 │ ←───────────── │  AI agent loop │
+│(PokeChat)│                     │ data/*.json│  取 pending    │ (Claude Code等) │
+└────────┘  ←────────────────── └────────┘ ─────────────→  │  处理反馈      │
+              对话面板显示回复    回写 conclusion + 移 done │  改代码/回复    │
+                                                          └──────────────┘
+```
+
+**Claude Code 启动方式**（1 分钟）：
+
+```bash
+cd PokeChat
+# 方式一：Claude Code 的循环任务（每 1 分钟自动检查一次）
+claude --loop --prompt "
+检查 data/*.json（PokeChat 反馈，排除 queue.json 和子目录）：
+1. 有新反馈 → mv data/*.json data/processing/
+2. 读每条（path/selector/text/note）→ 定位组件源码并修改
+3. 处理完 → 移到 data/done/ 并给文件追加 conclusion 字段（完整回复）
+无新反馈则简短确认
+"
+```
+
+> **不启动 loop = 只有收集没有回复**（纯记录模式），这是设计如此——AI 处理不是 PokeChat 内建的。
+
+## 🔄 数据如何交互（数据流）
+
+| 环节 | 谁 | 做什么 | 数据位置 |
+|---|---|---|---|
+| 1 提交 | 前端 | `POST /api/feedback` `{items:[{path,selector,text,note}]}` | `data/{时间戳}.json`（pending） |
+| 2 轮询 | AI loop | 读根目录 `*.json`（排除 queue.json） | 取 pending |
+| 3 处理 | AI loop | 读备注 → 改代码/回答 | — |
+| 4 标记处理中 | AI loop | `mv data/*.json data/processing/` | processing/ |
+| 5 回写回复 | AI loop | 给文件加 `conclusion` 字段（完整回复） | 文件内 |
+| 6 完成 | AI loop | `mv data/processing/*.json data/done/` | done/ |
+| 7 展示 | 前端 | 轮询 `GET /api/feedback/status`（10s） | 对话面板显示 |
+
+**也可以直接操作文件**（本地部署）：AI 端不调接口，直接读写 `data/` 目录（pending→processing→done + conclusion 字段），效果相同。
+
 ## 🚀 快速开始（无需安装）
 
 ```bash
