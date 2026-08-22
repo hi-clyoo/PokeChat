@@ -83,22 +83,24 @@
   // 项目暗色主题：背景 hsl(222 47% 6%)、卡 hsl(222 40% 9%)、主色暖橙红 hsl(15 89% 56%)≈#F35D2B、
   // glass 渐变 + 发丝边框 + 内高光 + blur(14px) + 圆角 1rem
   var GLASS_CSS = [
-    ":root { --pc-bg:hsl(222 47% 6%); --pc-card:hsl(222 40% 9%); --pc-card-2:rgba(255,255,255,.06);",
-    "  --pc-border:rgba(255,232,214,.10); --pc-primary:hsl(15 89% 56%);",
-    "  --pc-text:hsl(210 30% 92%); --pc-muted:hsl(215 18% 62%); --pc-muted-2:hsla(215,18%,62%,.5);",
+    ":root { --pc-bg:hsl(222 47% 6%); --pc-card:hsl(222 40% 9%); --pc-card-2:rgba(255,255,255,.09);",
+    "  --pc-border:rgba(255,232,214,.16); --pc-primary:hsl(15 89% 56%);",
+    "  --pc-text:hsl(210 30% 94%); --pc-muted:hsl(215 20% 76%); --pc-muted-2:hsla(215,20%,76%,.6);",
     "  --pc-danger:hsl(0 74% 60%); --pc-warn:hsl(38 92% 55%); --pc-green:hsl(152 55% 46%);",
-    "  --pc-hi:rgba(255,255,255,.06); --pc-radius:1rem; }",
+    "  --pc-hi:rgba(255,255,255,.08); --pc-radius:1rem; }",
+    // 2026-08-22 整体可读性优化：glass 底色加深（白色叠加 .10/.05）+ 保留毛玻璃 blur + 发丝边框；
+    // muted 色提亮（62%→76%）——之前文字在透底上对比度不足看不清
     "[data-pokechat] { font-family: system-ui, sans-serif; color: var(--pc-text); }",
-    "[data-pokechat] .pc-glass { background-image: linear-gradient(162deg, rgba(255,255,255,.055), rgba(255,255,255,.012));",
+    "[data-pokechat] .pc-glass { background-image: linear-gradient(162deg, rgba(255,255,255,.10), rgba(255,255,255,.05));",
     "  border:1px solid var(--pc-border); border-radius:var(--pc-radius);",
     "  box-shadow: 0 12px 30px rgba(0,0,0,.35), inset 0 1px 0 var(--pc-hi);",
     "  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }",
     "[data-pokechat] .pc-btn { background: var(--pc-card-2); color: var(--pc-text); border:1px solid var(--pc-border);",
     "  border-radius:9px; padding:6px 12px; cursor:pointer; font-size:13px; transition: all .15s; }",
-    "[data-pokechat] .pc-btn:hover { background: rgba(255,255,255,.10); }",
+    "[data-pokechat] .pc-btn:hover { background: rgba(255,255,255,.14); }",
     "[data-pokechat] .pc-btn-primary { background: var(--pc-primary); color:hsl(222 47% 6%); font-weight:600; border-color:transparent; }",
     "[data-pokechat] .pc-btn-primary:hover { opacity:.9; }",
-    "[data-pokechat] .pc-input, [data-pokechat] .pc-textarea { background: rgba(255,255,255,.04); color: var(--pc-text);",
+    "[data-pokechat] .pc-input, [data-pokechat] .pc-textarea { background: rgba(255,255,255,.08); color: var(--pc-text);",
     "  border:1px solid var(--pc-border); border-radius:9px; padding:8px 10px; font-size:13px; width:100%;",
     "  box-sizing:border-box; outline:none; }",
     "[data-pokechat] .pc-input:focus, [data-pokechat] .pc-textarea:focus { border-color: var(--pc-primary); }",
