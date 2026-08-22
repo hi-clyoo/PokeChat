@@ -561,8 +561,12 @@
         var b = el("button", "pc-btn", null);
         b.style.cssText = "display:block;width:100%;text-align:left;font-size:11px;padding:5px 8px;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
         var st = it.conclusion ? "done" : (status.processing.indexOf(it) >= 0 ? "processing" : "pending");
+        // 2026-08-22 修复：组件反馈条目索引始终显示组件信息（selector），note 作为次要附注——
+        // 之前 note 优先导致有 note 时组件选择器信息被吞
+        var idxLabel = it.selector ? (it.note ? it.selector + "：" + it.note : it.selector)
+          : (it.note || it.text || it.path);
         b.innerHTML = "<span style='display:inline-block;width:6px;height:6px;border-radius:50%;background:" +
-          (st === "done" ? "var(--pc-green)" : st === "processing" ? "var(--pc-amber)" : "var(--pc-muted)") + ";margin-right:5px;'></span>" + esc(it.note || it.text || it.selector || it.path);
+          (st === "done" ? "var(--pc-green)" : st === "processing" ? "var(--pc-amber)" : "var(--pc-muted)") + ";margin-right:5px;'></span>" + esc(idxLabel);
         b.onclick = function () { var bd = $("[data-pc-body]", d); var t = bd.querySelector('[data-msg="' + it.ts + '"]'); if (t) t.scrollIntoView({ behavior: "smooth", block: "center" }); };
         idx.appendChild(b);
       });
