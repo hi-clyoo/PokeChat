@@ -114,6 +114,25 @@ python3 server.py          # http://127.0.0.1:8123
 </script>
 ```
 
+### 接入 Vibe-Astock 本地后端（2026-08-22 实测）
+
+本地后端接口是 `/api/ui-feedback` 系（不是开源 server.py 的 `/api/feedback`），
+通过 `apiPrefix` + `queueApi` 对齐：
+
+```html
+<script src="/pokechat/pokechat.js"></script>
+<script>
+  PokeChat.init({
+    endpoint: "",                        // 同源：后端就是本站
+    apiPrefix: "/api/ui-feedback",       // 反馈提交/状态（开源版默认 /api/feedback）
+    queueApi: "/api/ui-feedback/queue",  // 队列后端持久化（刷新不丢；不配则仅 localStorage）
+  });
+</script>
+```
+
+Vibe-Astock 已用此方式把内置反馈系统整体切换为 PokeChat（`frontend/index.html` 引入，
+Layout 内置实现移除）。
+
 ### React / Vue / 任何框架
 
 `pokechat.js` 是**框架无关**的原生 DOM 实现，直接 `<script>` 引入后 `PokeChat.init()` 即可，不依赖框架运行时。
