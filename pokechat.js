@@ -648,8 +648,11 @@
       wrap.innerHTML =
         "<div style='display:flex;justify-content:flex-end;'>" +
         "  <div data-pc-ub='" + esc(it.ts) + "' style='max-width:75%;background:rgba(255,255,255,.07);border-radius:16px 16px 2px 16px;padding:8px 12px;font-size:12px;" + (editable ? "cursor:pointer;border:1px dashed transparent;" : "") + "'>" +
-        "    <div style='font-weight:600;font-size:11px;'>" + esc(it.text || it.selector) + "</div>" +
+        // 2026-08-22 用户问「只有文本吗」：补上页面路径 + 组件选择器（数据里有，之前没渲染）
+        (it.selector ? "    <div style='font-family:monospace;font-size:10px;color:var(--pc-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>" + esc(it.selector) + "</div>" : "") +
+        "    <div style='font-weight:600;font-size:11px;'>" + esc(it.text || "") + "</div>" +
         "    <div style='margin-top:2px;color:var(--pc-text);'>" + esc(it.note) + "</div>" +
+        (it.path ? "    <div style='margin-top:2px;font-size:9px;color:var(--pc-muted-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>页面：" + esc(it.path) + "</div>" : "") +
         "    <span class='pc-badge " + stCls + "' style='margin-top:5px;display:inline-block;'>" + stLabel + "</span>" +
         (editable ? " <span style='font-size:9px;color:var(--pc-muted);margin-left:4px;'>点击编辑</span>" : "") +
         "  </div>" +
