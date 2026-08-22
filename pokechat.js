@@ -358,6 +358,8 @@
     buildEditDialog();
     // 队列对话大弹窗
     buildQueueDialog();
+    // 滚动智能跟随：「回到底部」按钮（2026-08-22 用户要求）
+    setupScrollBtn(document.querySelector("[data-pokechat='queue']"));
   }
 
   function buildNoteDialog() {
@@ -488,7 +490,7 @@
     // 100% 对齐项目版 IM 窗口：glass rounded-2xl h-[75vh] max-w-3xl +
     // 顶部计数 + 左索引（直接/组件分组）+ 右对话（用户右/AI 左）+ 待发送区 + 直接发送
     d.innerHTML =
-      '<div class="pc-glass" style="width:768px;max-width:96vw;height:75vh;display:flex;flex-direction:column;overflow:hidden;border-radius:16px;">' +
+      '<div class="pc-glass" style="width:768px;max-width:96vw;height:75vh;display:flex;flex-direction:column;overflow:hidden;border-radius:16px;position:relative;">' +
       '  <div style="padding:10px 16px;border-bottom:1px solid var(--pc-border);display:flex;justify-content:space-between;align-items:center;">' +
       '    <b style="font-size:14px;">反馈对话</b>' +
       '    <div style="font-size:11px;color:var(--pc-text);display:flex;gap:14px;align-items:center;">' +
@@ -503,6 +505,7 @@
       '    <div style="flex:1;display:flex;flex-direction:column;min-width:0;">' +
       '      <div data-pc-body style="flex:1;overflow-y:auto;padding:12px 16px;"></div>' +
       '      <div data-pc-pend style="border-top:1px solid var(--pc-border);padding:8px 12px 0;display:none;"></div>' +
+      '      <button data-pc-scrollbtn style="display:none;position:absolute;right:24px;bottom:120px;z-index:20;background:hsl(15 89% 56%);color:#fff;border:none;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.35);">回到底部</button>' +
       '      <div style="padding:12px 16px;border-top:1px solid var(--pc-border);display:flex;gap:8px;">' +
       '        <input class="pc-input" data-pc-dmsg placeholder="直接发消息给 AI（Enter 发送）" style="flex:1;min-width:0;">' +
       '        <button class="pc-btn pc-btn-primary" data-pc-send style="padding:8px 14px;">发送</button>' +
@@ -637,7 +640,31 @@
         "</div>";
       body.appendChild(wrap);
     });
-    body.scrollTop = body.scrollHeight;
+    // 2026-08-22 用户要求：滚动查看历史时新消息不强制跳底（打断阅读），
+    // 仅当用户已在底部时自动跟随；离开底部显示「回到底部」按钮
+    var nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
+    if (nearBottom) {
+      body.scrollTop = body.scrollHeight;
+      var sb = $("[data-pc-scrollbtn]", d);
+      if (sb) sb.style.display = "none";
+    } else {
+      var sb2 = $("[data-pc-scrollbtn]", d);
+      if (sb2) sb2.style.display = "block";
+    }
+  }
+
+  function setupScrollBtn(d) {
+    var body = $("[data-pc-body]", d);
+    var btn = $("[data-pc-scrollbtn]", d);
+    if (!body || !btn) return;
+    body.addEventListener("scroll", function () {
+      var nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
+      btn.style.display = nearBottom ? "none" : "block";
+    });
+    btn.onclick = function () {
+      body.scrollTo({ top: body.scrollHeight, behavior: "smooth" });
+      btn.style.display = "none";
+    };
   }
 
   function toast(msg) {
