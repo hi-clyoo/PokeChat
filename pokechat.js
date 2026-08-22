@@ -195,7 +195,10 @@
   function openNoteDialog(info) {
     picked = info;
     note = "";
-    closeAllDialogs("note");
+    // 2026-08-22 修复：IM 窗口开着时使用组件反馈，弹窗会自动消失——不能再 closeAllDialogs("note")
+    // 关掉 queue（IM 窗口）。只关编辑弹窗，note 叠加在 IM 之上（z-index 3002）
+    var editDlg = $("[data-pokechat='edit']");
+    if (editDlg) editDlg.classList.add("hidden");
     var m = $("[data-pokechat='note']");
     $("[data-pc-path]", m).textContent = location.pathname + location.search;
     $("[data-pc-sel]", m).textContent = info.selector;
@@ -359,7 +362,8 @@
   function buildNoteDialog() {
     var m = el("div", "pc-modal hidden");
     m.setAttribute("data-pokechat", "note");
-    m.style.cssText = "position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:24px;";
+    // z-index 3002：高于 edit(3001) 和 queue(3000)——IM 窗口开着时组件反馈弹窗叠加在其上（2026-08-22）
+    m.style.cssText = "position:fixed;inset:0;z-index:2147483002;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:24px;";
     m.onclick = function (e) { if (e.target === m) closeNoteDialog(); };
     // 组件反馈弹窗：白底深字（2026-08-22 用户反馈看不清；与编辑弹窗同款，保持玻璃圆角风格）
     m.innerHTML =
