@@ -245,7 +245,7 @@
     // 只关备注弹窗，保留 IM 窗口；z-index 由 buildEditDialog 的 2147483001 保证在上层
     var noteDlg = $("[data-pokechat='note']");
     if (noteDlg) noteDlg.classList.add("hidden");
-    // 已提交的反馈（pending/processing）：打开编辑时标记 editing=true，AI 循环跳过（2026-08-22 用户要求）
+    // 已提交的反馈（仅 pending 可编辑）：打开编辑时标记 editing=true，AI 循环跳过（2026-08-22 用户要求）
     if (it.ts && !it.local) {
       fetch(api("/") + "/" + it.ts, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ editing: true }) })
         .catch(function () {});
@@ -644,7 +644,8 @@
       var time = tsStr.length >= 12 ? tsStr.slice(8, 10) + ":" + tsStr.slice(10, 12) : "";
       // 用户（右，圆角右上小）——对齐项目版 bg-secondary/25 + 状态徽标
       // 2026-08-22 用户要求：等待/处理中的消息可点击再编辑（pending/processing 可编辑，done 不可）
-      var editable = st !== "done";
+      // 2026-08-22 用户要求：只有「等待」（pending）可编辑；处理中/已完成不可编辑（AI 正在处理）
+      var editable = st === "pending";
       // 2026-08-22 整套信息层级方案（不再逐个改）：
       // 组件选择器=橙红等宽 chip · 组件文本=橙红粗体 · 备注=亮白正文 · 页面路径=深底 chip
       // 气泡背景提实（.10 + 边框），保证所有文字有底可读
