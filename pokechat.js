@@ -88,6 +88,10 @@
     "  --pc-text:hsl(210 30% 94%); --pc-muted:hsl(215 20% 76%); --pc-muted-2:hsla(215,20%,76%,.6);",
     "  --pc-danger:hsl(0 74% 60%); --pc-warn:hsl(38 92% 55%); --pc-green:hsl(152 55% 46%);",
     "  --pc-hi:rgba(255,255,255,.08); --pc-radius:1rem; }",
+    // 2026-08-22 主题内容区不透明方案（用户要求）：内容区（列表逐条/气泡/按钮底）
+    // 文字小需更好阅读 → 用更实的半透明白；标题/玻璃层保持低透明度
+    "[data-pokechat] { --pc-content:rgba(255,255,255,.13); --pc-content-strong:rgba(255,255,255,.18);",
+    "  --pc-content-border:rgba(255,255,255,.24); }",
     // 2026-08-22 整体可读性优化：glass 底色加深（白色叠加 .10/.05）+ 保留毛玻璃 blur + 发丝边框；
     // muted 色提亮（62%→76%）——之前文字在透底上对比度不足看不清
     "[data-pokechat] { font-family: system-ui, sans-serif; color: var(--pc-text); }",
@@ -115,8 +119,12 @@
     "[data-pokechat] .pc-badge-proc { background:rgba(251,191,36,.25); color:#fcd34d; }",
     "[data-pokechat] .pc-badge-wait { background:rgba(148,163,184,.25); color:#cbd5e1; }",
     ".pokechat-picking, .pokechat-picking * { cursor: crosshair !important; }",
-    ".pokechat-picking *:hover { outline:1px dashed hsl(15 89% 56% / .55) !important; outline-offset:1px; }",
+    ".pokechat-picking *:hover { outline:1px dashed var(--pc-primary) !important; outline-offset:1px; }",
     ".pokechat-picking *:hover:not(:has(*:hover)) { outline:2px solid var(--pc-primary) !important; outline-offset:1px; }",
+    // 2026-08-22（155346/160136/162645）：canvas 在部分 WebKit 下 outline/box-shadow 都不渲染，
+    // 改在其**父容器**上画实线（:has(> canvas:hover)），canvas 自身规则保留兜底
+    ".pokechat-picking canvas:hover { outline:2px solid var(--pc-primary) !important; outline-offset:1px; }",
+    ".pokechat-picking div:has(> canvas:hover) { outline:2px solid var(--pc-primary) !important; outline-offset:1px; }",
   ].join("\n");
 
   /* ================= 选择模式（层级高亮） ================= */
@@ -218,15 +226,20 @@
   }
   function closeNoteDialog() { $("[data-pokechat='note']").classList.add("hidden"); picked = null; clearOutline(); }
   function addToQueue() {
-    if (!picked || !note.trim()) return;
-    queue.push({ path: location.pathname + location.search, selector: picked.selector, text: picked.text, note: note, ts: Date.now() });
+    // 2026-08-22（143013）：从备注弹窗 DOM 读值，不依赖共享全局 note 变量
+    var ta = $("[data-pokechat='note'] [data-pc-note]");
+    var v = ta ? (ta.value || "") : (note || "");
+    if (!picked || !v.trim()) return;
+    queue.push({ path: location.pathname + location.search, selector: picked.selector, text: picked.text, note: v, ts: Date.now() });
     saveQueue(); renderFloating();
     closeNoteDialog();
     toast("已加入反馈队列（共 " + queue.length + " 条），Ctrl+F 可再次选择");
   }
   function sendDirectFromDialog() {
-    if (!picked || !note.trim()) return;
-    sendFeedback([{ path: location.pathname + location.search, selector: picked.selector, text: picked.text, note: note }]);
+    var ta = $("[data-pokechat='note'] [data-pc-note]");
+    var v = ta ? (ta.value || "") : (note || "");
+    if (!picked || !v.trim()) return;
+    sendFeedback([{ path: location.pathname + location.search, selector: picked.selector, text: picked.text, note: v }]);
     closeNoteDialog();
   }
   function sendFeedback(items) {
@@ -240,7 +253,7 @@
 
   /* ================= 队列编辑 ================= */
   function openEdit(it, readonly) {
-    editing = it; note = it.note;
+    editing = it; note = it.note || "";  // 2026-08-22：无 note 字段时防空（note.trim 崩溃/保存空）
     // 2026-08-22 修复：编辑弹窗要**叠加**在 IM 窗口之上（React 原版两层同显）。
     // 只关备注弹窗，保留 IM 窗口；z-index 由 buildEditDialog 的 2147483001 保证在上层
     var noteDlg = $("[data-pokechat='note']");
@@ -268,26 +281,39 @@
     }
     m.classList.remove("hidden");
   }
-  function closeEdit() {
+  function closeEdit(skipPut) {
     $("[data-pokechat='edit']").classList.add("hidden");
-    if (editing && editing.ts && !editing.local) {
+    // 2026-08-22 修复（143013「保存后数据没了」）：saveEdit 已在一个 PUT 里
+    // 带 note + editing:false，这里再发一个**无 note** 的 PUT 会与其竞态；
+    // saveEdit 传 skipPut=true 跳过，避免覆盖/丢失备注
+    if (!skipPut && editing && editing.ts && !editing.local) {
       fetch(api("/") + "/" + editing.ts, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ editing: false }) })
         .catch(function () {});
     }
     editing = null;
   }
+  function updateStatusItem(ts, newNote) {
+    // 2026-08-22（143013）：保存后本地立即更新列表，不等 PUT 响应/refreshStatus 竞态
+    status.pending = (status.pending || []).map(function (x) { return x.ts === ts ? Object.assign({}, x, { note: newNote }) : x; });
+    renderQueueDialog();
+  }
   function saveEdit() {
     if (!editing) return;
     userScrolledAway = false;  // 2026-08-22：编辑保存后自动到底部
+    // ⚠️ 2026-08-22（143013「保存后数据没了」）：**从 textarea DOM 读值**做事实来源——
+    // 全局 note 变量可能因弹窗切换/重置与输入框不同步（保存空/旧值），DOM 永远是当前输入
+    var ta = $("[data-pc-note]");
+    var newNote = ta ? (ta.value || "") : (note || "");
     if (editing.ts && !editing.local) {
-      // 已提交反馈：更新备注 + 清除 editing 标记（AI 恢复处理）
-      fetch(api("/") + "/" + editing.ts, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note: note, editing: false }) })
-        .then(function () { refreshStatus(); toast("已更新，AI 将按新备注处理"); })
+      // 已提交反馈：一次 PUT 带 note + 清除 editing 标记（AI 恢复处理）
+      var ts = editing.ts;
+      fetch(api("/") + "/" + ts, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note: newNote, editing: false }) })
+        .then(function () { updateStatusItem(ts, newNote); refreshStatus(); toast("已更新，AI 将按新备注处理"); })
         .catch(function () { toast("更新失败，稍后重试"); });
-      closeEdit();
+      closeEdit(true);
     } else {
-      queue = queue.map(function (x) { return x.ts === editing.ts ? Object.assign({}, x, { note: note }) : x; });
-      saveQueue(); renderFloating(); closeEdit();
+      queue = queue.map(function (x) { return x.ts === editing.ts ? Object.assign({}, x, { note: newNote }) : x; });
+      saveQueue(); renderFloating(); renderQueueDialog(); closeEdit(true);  // 2026-08-22：本地队列保存后同步刷新 IM 列表
     }
   }
   function removeQueueItem(ts) { queue = queue.filter(function (x) { return x.ts !== ts; }); saveQueue(); renderFloating(); }
@@ -323,12 +349,15 @@
 
     var wrap = el("div", null);
     wrap.setAttribute("data-pokechat", "");
-    wrap.style.cssText = "position:fixed;bottom:80px;left:16px;z-index:2147483000;display:flex;flex-direction:column;align-items:flex-start;gap:8px;";
+    // 2026-08-22：浮窗 z-index 降到 2000——之前 2147483000 会盖住任务队列悬浮窗
+    // （TaskFloating 面板 z-3000）；弹窗（modal）仍保持 2147483000+ 永远最上
+    wrap.style.cssText = "position:fixed;bottom:80px;left:16px;z-index:2000;display:flex;flex-direction:column;align-items:flex-start;gap:8px;";
 
     // 队列 + 🎯（下）—— 对齐项目版：队列按钮带处理中 ping 点；🎯 用 lucide MousePointerClick SVG 图标
     var row = el("div", null);
     row.style.cssText = "display:flex;align-items:center;gap:8px;";
-    var queueBtn = el("button", "pc-btn pc-btn-primary pc-glass", "反馈队列");
+    var queueBtn = el("button", "pc-btn pc-btn-primary pc-glass", null);
+    queueBtn.innerHTML = "<span data-pc-flabel>反馈队列</span>";  // 2026-08-22：固定 label 节点，渲染只改文本不重建
     queueBtn.style.cssText = "background:var(--pc-primary);color:#fff;border-radius:999px;padding:8px 14px;font-weight:700;font-size:12px;";
     queueBtn.onclick = function () {
       qOpen = !qOpen;
@@ -418,8 +447,8 @@
       '    background:rgba(255,255,255,.75); color:hsl(222 45% 12%); border:1px solid rgba(0,0,0,.15); border-radius:9px; padding:8px 10px; font-size:13px; outline:none;"></textarea>' +
       '  <div style="display:flex;justify-content:flex-end;gap:8px;">' +
       '    <button data-pc-cancel style="background:none;border:none;color:hsl(222 20% 35%);cursor:pointer;padding:6px 12px;font-size:13px;">取消</button>' +
-      '    <button data-pc-sendd style="border:1px solid hsl(15 89% 56% / .6);color:hsl(15 80% 45%);background:rgba(255,255,255,.5);border-radius:9px;padding:6px 12px;cursor:pointer;font-size:13px;" title="Ctrl+Enter">直接发送（Ctrl+Enter）</button>' +
-      '    <button data-pc-add style="background:hsl(15 89% 56%);color:#fff;font-weight:600;border:none;border-radius:9px;padding:6px 14px;cursor:pointer;font-size:13px;" title="Enter">加入队列（Enter）</button>' +
+      '    <button data-pc-sendd style="border:1px solid var(--pc-primary);color:var(--pc-primary);background:rgba(255,255,255,.5);border-radius:9px;padding:6px 12px;cursor:pointer;font-size:13px;" title="Ctrl+Enter">直接发送（Ctrl+Enter）</button>' +
+      '    <button data-pc-add style="background:var(--pc-primary);color:#fff;font-weight:600;border:none;border-radius:9px;padding:6px 14px;cursor:pointer;font-size:13px;" title="Enter">加入队列（Enter）</button>' +
       '  </div>' +
       '</div>';
     $("[data-pc-cancel]", m).onclick = closeNoteDialog;
@@ -481,7 +510,7 @@
       '    background:rgba(255,255,255,.75); color:hsl(222 45% 12%); border:1px solid rgba(0,0,0,.15); border-radius:9px; padding:8px 10px; font-size:13px; outline:none;"></textarea>' +
       '  <div style="display:flex;justify-content:flex-end;gap:8px;">' +
       '    <button data-pc-cancel style="background:none;border:none;color:hsl(222 20% 35%);cursor:pointer;padding:6px 12px;font-size:13px;">取消</button>' +
-      '    <button data-pc-save style="background:hsl(15 89% 56%);color:#fff;font-weight:600;border:none;border-radius:9px;padding:6px 14px;cursor:pointer;font-size:13px;" title="Enter">保存（Enter）</button>' +
+      '    <button data-pc-save style="background:var(--pc-primary);color:#fff;font-weight:600;border:none;border-radius:9px;padding:6px 14px;cursor:pointer;font-size:13px;" title="Enter">保存（Enter）</button>' +
       '  </div>' +
       '</div>';
     $("[data-pc-cancel]", m).onclick = closeEdit;
@@ -522,19 +551,22 @@
       '<div class="pc-glass" style="width:883px;max-width:96vw;height:75vh;display:flex;flex-direction:column;overflow:hidden;border-radius:16px;position:relative;">' +
       '  <div style="padding:10px 16px;border-bottom:1px solid var(--pc-border);display:flex;justify-content:space-between;align-items:center;">' +
       '    <b style="font-size:14px;">反馈对话</b>' +
-      '    <div style="font-size:12px;font-weight:600;color:#f1f5f9;display:flex;gap:14px;align-items:center;">' +
+      '    <div style="font-size:12px;font-weight:600;color:var(--pc-text);display:flex;gap:14px;align-items:center;">' +
       '      <span>等待 <b data-pc-n-pending style="color:#fcd34d">0</b></span>' +
       '      <span>处理中 <b data-pc-n-processing style="color:#fcd34d">0</b></span>' +
       '      <span>已完成 <b data-pc-n-done style="color:#6ee7b7">0</b></span>' +
-      '      <button data-pc-dlg-close style="background:none;border:none;color:#f1f5f9;cursor:pointer;padding:2px 6px;font-size:15px;" title="关闭">✕</button>' +
+      '      <button data-pc-theme-btn style="background:none;border:none;color:var(--pc-muted);cursor:pointer;padding:2px 6px;font-size:14px;line-height:1;" title="主题设置（橙/蓝/紫 × 亮/暗）">🎨</button>' +
+      '      <button data-pc-dlg-close style="background:var(--pc-content);border:1px solid var(--pc-content-border);color:var(--pc-text);cursor:pointer;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;transition:background .15s;" title="关闭">✕</button>' +
       '    </div>' +
       '  </div>' +
       '  <div style="display:flex;flex:1;min-height:0;">' +
-      '    <div data-pc-index style="width:176px;border-right:1px solid var(--pc-border);overflow-y:auto;padding:8px;flex-shrink:0;"></div>' +
+      // 2026-08-22 内容区方案：索引区 + 对话列表容器也套内容区背景（列表整体有底色，
+      // 逐条 wrap 再叠一层，层次清晰）——用户反馈「反馈列表没应用主项目内容区」
+      '    <div data-pc-index style="width:176px;border-right:1px solid var(--pc-content-border);overflow-y:auto;padding:8px;flex-shrink:0;background:rgba(255,255,255,.07);"></div>' +
       '    <div style="flex:1;display:flex;flex-direction:column;min-width:0;">' +
-      '      <div data-pc-body style="flex:1;overflow-y:auto;padding:12px 16px;"></div>' +
+      '      <div data-pc-body style="flex:1;overflow-y:auto;padding:12px 16px;background:rgba(255,255,255,.05);"></div>' +
       '      <div data-pc-pend style="border-top:1px solid var(--pc-border);padding:8px 12px 0;display:none;"></div>' +
-      '      <button data-pc-scrollbtn style="display:none;position:absolute;right:24px;bottom:120px;z-index:20;background:hsl(15 89% 56%);color:#fff;border:none;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.35);">回到底部</button>' +
+      '      <button data-pc-scrollbtn style="display:none;position:absolute;right:24px;bottom:120px;z-index:20;background:var(--pc-primary);color:#fff;border:none;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.35);">回到底部</button>' +
       '      <div style="padding:12px 16px;border-top:1px solid var(--pc-border);display:flex;gap:8px;">' +
       '        <input class="pc-input" data-pc-dmsg placeholder="直接发消息给 AI（Enter 发送）" style="flex:1;min-width:0;">' +
       '        <button class="pc-btn pc-btn-primary" data-pc-send style="padding:8px 14px;">发送</button>' +
@@ -543,6 +575,7 @@
       '  </div>' +
       '</div>';
     $("[data-pc-dlg-close]", d).onclick = function () { qOpen = false; d.classList.add("hidden"); };
+    $("[data-pc-theme-btn]", d).onclick = function () { openThemeDialog(); };
     $("[data-pc-send]", d).onclick = function () { sendDirectMsg(); };
     $("[data-pc-dmsg]", d).addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendDirectMsg(); } });
     $("[data-pc-dmsg]", d).addEventListener("input", function (e) { directMsg = e.target.value; });
@@ -558,15 +591,118 @@
     $("[data-pc-dmsg]").value = "";
   }
 
+  /* ================= 主题设置（2026-08-22 用户纠正：**IM 自己的主题**） ================= */
+  // ⚠️ 只作用于 PokeChat 自己（[data-pokechat] 容器的 --pc-* 变量），
+  // **完全不碰主应用**（不改 html .light/.dark/data-color，不读写 vr-* 键）——
+  // 独立存储键 pc-theme。颜色主题控制主色/AI 气泡；明暗控制玻璃底与文字基色。
+  var THEMES = {
+    // 2026-08-22（评审优化）：每主题只存 primary，亮暗/透明度派生用 color-mix 生成——
+    // 加主题只需一行，不再手抄 10 个色值
+    orange: { label: "橙色", css: "#F35D2B", primary: "hsl(15 89% 56%)" },
+    blue: { label: "蓝色", css: "#3B82F6", primary: "hsl(217 91% 60%)" },
+    purple: { label: "紫色", css: "#8B5CF6", primary: "hsl(258 90% 66%)" },
+  };
+  function pcMix(pct, toward) { return "color-mix(in srgb, var(--pc-primary) " + pct + "%, " + toward + ")"; }
+
+  function getTheme() {
+    var dark = localStorage.getItem("pc-theme-dark") !== "0";
+    var color = localStorage.getItem("pc-theme-color");
+    if (color !== "blue" && color !== "purple") color = "orange";
+    return { dark: dark, color: color };
+  }
+  function applyTheme(t) {
+    localStorage.setItem("pc-theme-dark", t.dark ? "1" : "0");
+    localStorage.setItem("pc-theme-color", t.color);
+    var th = THEMES[t.color];
+    // 2026-08-22（用户反馈「只影响浮窗」）：变量必须设在 documentElement（:root）——
+    // IM 弹窗/备注弹窗是 body 直接子级，不继承浮窗容器上的变量；--pc-* 是 PokeChat
+    // 专用命名空间，主应用（--primary 等）完全不受影响
+    var root = document.documentElement;
+    // 颜色主题：主色 + 用户/AI 气泡（亮/暗各一套，color-mix 从 primary 派生）
+    root.style.setProperty("--pc-primary", th.primary);
+    root.style.setProperty("--pc-ai-bg", t.dark ? pcMix(20, "transparent") : pcMix(14, "transparent"));
+    root.style.setProperty("--pc-ai-border", t.dark ? pcMix(35, "transparent") : pcMix(28, "transparent"));
+    root.style.setProperty("--pc-ai-text", t.dark ? pcMix(65, "white") : pcMix(60, "black"));
+    root.style.setProperty("--pc-ub-bg", t.dark ? pcMix(22, "transparent") : pcMix(16, "transparent"));
+    root.style.setProperty("--pc-ub-border", t.dark ? pcMix(38, "transparent") : pcMix(30, "transparent"));
+    // 明暗：玻璃底色 + 文字基色（亮色 = 更实白底 + 深色文字）
+    if (t.dark) {
+      root.style.setProperty("--pc-content", "rgba(255,255,255,.13)");
+      root.style.setProperty("--pc-content-strong", "rgba(255,255,255,.18)");
+      root.style.setProperty("--pc-content-border", "rgba(255,255,255,.24)");
+      root.style.setProperty("--pc-text", "hsl(210 30% 94%)");
+      root.style.setProperty("--pc-muted", "hsl(215 20% 76%)");
+      root.style.setProperty("--pc-border", "rgba(255,232,214,.16)");
+      root.style.setProperty("--pc-card-2", "rgba(255,255,255,.09)");
+    } else {
+      root.style.setProperty("--pc-content", "rgba(255,255,255,.55)");
+      root.style.setProperty("--pc-content-strong", "rgba(255,255,255,.62)");
+      root.style.setProperty("--pc-content-border", "rgba(15,40,70,.20)");
+      root.style.setProperty("--pc-text", "hsl(222 40% 14%)");
+      root.style.setProperty("--pc-muted", "hsl(215 18% 42%)");
+      root.style.setProperty("--pc-border", "rgba(15,40,70,.16)");
+      root.style.setProperty("--pc-card-2", "rgba(255,255,255,.6)");
+    }
+  }
+  function buildThemeDialog() {
+    var d = el("div", "pc-modal hidden");
+    d.setAttribute("data-pokechat", "theme");
+    d.style.cssText = "position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px;";
+    d.onclick = function (e) { if (e.target === d) d.classList.add("hidden"); };
+    d.innerHTML =
+      '<div class="pc-glass" style="width:320px;padding:20px;border-radius:16px;">' +
+      '  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+      '    <b style="font-size:14px;">主题设置</b>' +
+      '    <button data-pc-theme-close style="background:none;border:none;color:var(--pc-text);cursor:pointer;padding:2px 6px;font-size:15px;" title="关闭">✕</button>' +
+      '  </div>' +
+      '  <div style="font-size:11px;font-weight:600;color:var(--pc-muted);margin-bottom:8px;">颜色主题</div>' +
+      '  <div data-pc-theme-colors style="display:flex;gap:8px;margin-bottom:16px;"></div>' +
+      '  <div style="font-size:11px;font-weight:600;color:var(--pc-muted);margin-bottom:8px;">明暗</div>' +
+      '  <div data-pc-theme-modes style="display:flex;gap:8px;"></div>' +
+      '  <div data-pc-theme-hint style="margin-top:12px;font-size:10px;color:var(--pc-muted-2);"></div>' +
+      '</div>';
+    $("[data-pc-theme-close]", d).onclick = function () { d.classList.add("hidden"); };
+    document.body.appendChild(d);
+  }
+  function renderThemeDialog() {
+    var d = document.querySelector("[data-pokechat='theme']");
+    if (!d) return;
+    var t = getTheme();
+    var box = $("[data-pc-theme-colors]", d);
+    box.innerHTML = Object.keys(THEMES).map(function (k) {
+      var th = THEMES[k];
+      return "<button data-pc-tc='" + k + "' style='flex:1;border-radius:10px;padding:8px 0;font-size:12px;font-weight:500;cursor:pointer;text-align:center;border:1px solid " +
+        (t.color === k ? "var(--pc-primary);box-shadow:0 0 0 2px var(--pc-primary);" : "var(--pc-border);") + "background:rgba(255,255,255,.04);color:var(--pc-text);'>" +
+        "<span style='display:block;width:20px;height:20px;border-radius:50%;background:" + th.css + ";margin:0 auto 4px;'></span>" + th.label + "</button>";
+    }).join("");
+    Object.keys(THEMES).forEach(function (k) {
+      var b = box.querySelector("[data-pc-tc='" + k + "']");
+      if (b) b.onclick = function () { applyTheme({ dark: getTheme().dark, color: k }); renderThemeDialog(); };
+    });
+    var mb = $("[data-pc-theme-modes]", d);
+    mb.innerHTML = ["light", "dark"].map(function (m) {
+      var on = t.dark === (m === "dark");
+      return "<button data-pc-tm='" + m + "' style='flex:1;border-radius:10px;padding:8px 0;font-size:12px;font-weight:500;cursor:pointer;border:1px solid " +
+        (on ? "var(--pc-primary);box-shadow:0 0 0 2px var(--pc-primary);" : "var(--pc-border);") + "background:rgba(255,255,255,.04);color:var(--pc-text);'>" +
+        (m === "light" ? "☀️ 亮色" : "🌙 暗色") + "</button>";
+    }).join("");
+    mb.querySelector("[data-pc-tm='light']").onclick = function () { applyTheme({ dark: false, color: getTheme().color }); renderThemeDialog(); };
+    mb.querySelector("[data-pc-tm='dark']").onclick = function () { applyTheme({ dark: true, color: getTheme().color }); renderThemeDialog(); };
+    $("[data-pc-theme-hint]", d).textContent = "当前：" + THEMES[t.color].label + " · " + (t.dark ? "暗色" : "亮色") + "（选择即时生效并保存）";
+  }
+  function openThemeDialog() {
+    renderThemeDialog();
+    var d = document.querySelector("[data-pokechat='theme']");
+    if (d) d.classList.remove("hidden");
+  }
+
   function renderFloating() {
     var qb = document.querySelector("[data-pokechat] .pc-btn-primary");
     if (!qb) return;
-    // 保留 ping 点节点：清空文本前先摘下来，再按需放回
+    // 2026-08-22（评审优化）：固定 label 节点只改文本，不再摘/放 ping 点
+    var label = qb.querySelector("[data-pc-flabel]");
+    if (label) label.textContent = queue.length ? "反馈队列（" + queue.length + "）" : "反馈队列";
     var dot = qb.querySelector("[data-pc-qdot]");
-    if (dot) dot.remove();
-    qb.textContent = "";
-    qb.appendChild(document.createTextNode(queue.length ? "反馈队列（" + queue.length + "）" : "反馈队列"));
-    if (dot) qb.appendChild(dot);
     var running = (status.pending ? status.pending.length : 0) + (status.processing ? status.processing.length : 0);
     if (dot) dot.style.display = running > 0 ? "inline-block" : "none";
   }
@@ -593,7 +729,8 @@
       if (!list.length) idx.appendChild(el("p", null, "<span style='font-size:11px;color:rgba(148,163,184,.4)'>无</span>"));
       list.forEach(function (it) {
         var b = el("button", "pc-btn", null);
-        b.style.cssText = "display:block;width:100%;text-align:left;font-size:11px;padding:5px 8px;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+        // 2026-08-22 主题内容区方案：索引条目用内容区不透明背景 + 圆角
+        b.style.cssText = "display:block;width:100%;text-align:left;font-size:11px;padding:5px 8px;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--pc-content);border:1px solid var(--pc-content-border);border-radius:8px;";
         var st = it.conclusion ? "done" : (status.processing.indexOf(it) >= 0 ? "processing" : "pending");
         // 2026-08-22 修复：组件反馈条目索引始终显示组件信息（selector），note 作为次要附注——
         // 之前 note 优先导致有 note 时组件选择器信息被吞
@@ -628,7 +765,7 @@
         "</div>" +
         "<div style='display:flex;flex-wrap:wrap;gap:6px;padding-bottom:8px;'>" +
         queue.map(function (q) {
-          return "<button data-pc-qchip='" + q.ts + "' style='max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:rgba(255,255,255,.07);border:1px solid var(--pc-border);border-radius:999px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--pc-text);'>" + esc(q.note || q.selector || q.path) + "</button>";
+          return "<button data-pc-qchip='" + q.ts + "' style='max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--pc-content);border:1px solid var(--pc-content-border);border-radius:999px;padding:3px 10px;font-size:11px;cursor:pointer;color:var(--pc-text);'>" + esc(q.note || q.selector || q.path) + "</button>";
         }).join("") +
         "</div>";
       $("[data-pc-clear]", pend).onclick = clearQueue;
@@ -645,7 +782,8 @@
       var st = it.conclusion ? "done" : (status.processing.indexOf(it) >= 0 ? "processing" : "pending");
       var wrap = el("div", null);
       wrap.setAttribute("data-msg", it.ts);
-      wrap.style.marginBottom = "10px";
+      // 2026-08-22 主题内容区方案：对话逐条 = 内容区背景卡片（气泡在其内，层次更清晰）
+      wrap.style.cssText = "margin-bottom:10px;background:var(--pc-content);border:1px solid var(--pc-content-border);border-radius:12px;padding:8px 10px;";
       var stLabel = st === "done" ? "已完成" : st === "processing" ? "处理中" : "等待";
       var stCls = st === "done" ? "pc-badge-done" : st === "processing" ? "pc-badge-proc" : "pc-badge-wait";
       var tsStr = String(it.ts || "");
@@ -657,12 +795,14 @@
       // 2026-08-22 整套信息层级方案（不再逐个改）：
       // 组件选择器=橙红等宽 chip · 组件文本=橙红粗体 · 备注=亮白正文 · 页面路径=深底 chip
       // 气泡背景提实（.10 + 边框），保证所有文字有底可读
+      // 2026-08-22（152028）：气泡配色对齐 IM 惯例——**我方=主色系底色**，
+      // AI 回复=带点透明度的白（组件反馈页风格）。原来正好反了，已交换。
       wrap.innerHTML =
         "<div style='display:flex;justify-content:flex-end;'>" +
-        "  <div data-pc-ub='" + esc(it.ts) + "' style='max-width:78%;background:rgba(255,255,255,.10);border:1px solid var(--pc-border);border-radius:16px 16px 2px 16px;padding:8px 12px;font-size:12px;" + (editable ? "cursor:pointer;border:1px dashed rgba(255,255,255,.25);" : "") + "'>" +
+        "  <div data-pc-ub='" + esc(it.ts) + "' style='max-width:78%;background:var(--pc-ub-bg);border:1px solid var(--pc-ub-border);border-radius:16px 16px 2px 16px;padding:8px 12px;font-size:12px;" + (editable ? "cursor:pointer;border:1px dashed var(--pc-ub-border);" : "") + "'>" +
         (it.selector ? "    <div style='display:inline-block;font-family:monospace;font-size:10px;color:#fcd34d;background:rgba(252,211,77,.12);border:1px solid rgba(252,211,77,.3);border-radius:4px;padding:0 5px;margin-bottom:3px;'>" + esc(it.selector) + "</div>" : "") +
-        (it.text ? "    <div style='font-weight:700;font-size:12px;color:hsl(15 89% 65%);'>" + esc(it.text) + "</div>" : "") +
-        "    <div style='margin-top:2px;color:#f1f5f9;'>" + esc(it.note) + "</div>" +
+        (it.text ? "    <div style='font-weight:700;font-size:12px;color:#fff;'>" + esc(it.text) + "</div>" : "") +
+        "    <div style='margin-top:2px;color:var(--pc-text);'>" + esc(it.note) + "</div>" +
         (it.path ? "    <div style='margin-top:3px;font-size:9px;color:#cbd5e1;background:rgba(15,23,42,.6);border-radius:4px;padding:1px 5px;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>" + esc(it.path) + "</div>" : "") +
         "    <div style='margin-top:5px;'><span class='pc-badge " + stCls + "' style='display:inline-block;'>" + stLabel + "</span>" +
         (st !== "done" ? " <span style='font-size:9px;color:var(--pc-muted);margin-left:4px;'>" + (editable ? "点击编辑" : "点击查看") + "</span>" : "") + "</div>" +
@@ -670,9 +810,9 @@
         "</div>" +
         // AI（左，主色淡橙 + AI 徽标 + 时间戳）——整体方案：背景提实 + 边框（2026-08-22）
         "<div style='display:flex;justify-content:flex-start;margin-top:5px;'>" +
-        "  <div style='max-width:78%;background:hsl(15 89% 56% / .14);border:1px solid hsl(15 89% 56% / .25);border-radius:16px 16px 16px 2px;padding:8px 12px;font-size:12px;color:var(--pc-text);white-space:pre-wrap;word-break:break-word;'>" +
+        "  <div style='max-width:78%;background:rgba(255,255,255,.10);border:1px solid var(--pc-content-border);border-radius:16px 16px 16px 2px;padding:8px 12px;font-size:12px;color:var(--pc-text);white-space:pre-wrap;word-break:break-word;'>" +
         "    <div style='margin-bottom:3px;display:flex;align-items:center;gap:6px;'>" +
-        "      <span style='background:hsl(15 89% 56% / .2);border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700;color:hsl(15 89% 70%);'>AI</span>" +
+        "      <span style='background:var(--pc-ai-bg);border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700;color:var(--pc-ai-text);'>AI</span>" +
         "      <span style='font-family:monospace;font-size:10px;color:var(--pc-muted-2);'>" + time + "</span>" +
         "    </div>" +
         (st === "done" ? esc(it.conclusion || "已处理完成") : st === "processing" ? "处理中…" : "等待调度，1 分钟内开始处理") +
@@ -720,7 +860,7 @@
   function toast(msg) {
     var t = el("div", "pc-glass", null);
     t.setAttribute("data-pokechat", "");
-    t.style.cssText = "position:fixed;bottom:140px;left:50%;transform:translateX(-50%);z-index:2147483000;padding:8px 16px;font-size:13px;background:rgba(17,28,46,.92);";
+    t.style.cssText = "position:fixed;bottom:140px;left:50%;transform:translateX(-50%);z-index:2000;padding:8px 16px;font-size:13px;background:rgba(17,28,46,.92);";
     t.textContent = msg;
     document.body.appendChild(t);
     setTimeout(function () { t.remove(); }, 2500);
@@ -745,10 +885,15 @@
   }
 
   /* ================= 初始化（兼容第三方项目：DOM 未就绪时等待，2026-08-22） ================= */
+  var inited = false;  // 2026-08-22（评审优化）：幂等 guard，重复 init 不重复建 UI
   function doInit(config) {
+    if (inited) return;
+    inited = true;
     cfg = Object.assign({ endpoint: DEFAULT_ENDPOINT, apiPrefix: "/api/feedback" }, config || {});
     loadQueue();
     buildUI();
+    buildThemeDialog();
+    applyTheme(getTheme());  // 2026-08-22：初始化应用 IM 自己的主题（不碰主应用）
     renderFloating();
     refreshStatus();
     startTaskPolling();
