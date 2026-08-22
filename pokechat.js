@@ -493,11 +493,11 @@
       '<div class="pc-glass" style="width:768px;max-width:96vw;height:75vh;display:flex;flex-direction:column;overflow:hidden;border-radius:16px;position:relative;">' +
       '  <div style="padding:10px 16px;border-bottom:1px solid var(--pc-border);display:flex;justify-content:space-between;align-items:center;">' +
       '    <b style="font-size:14px;">反馈对话</b>' +
-      '    <div style="font-size:11px;color:var(--pc-text);display:flex;gap:14px;align-items:center;">' +
+      '    <div style="font-size:12px;font-weight:600;color:#f1f5f9;display:flex;gap:14px;align-items:center;">' +
       '      <span>等待 <b data-pc-n-pending style="color:#fcd34d">0</b></span>' +
       '      <span>处理中 <b data-pc-n-processing style="color:#fcd34d">0</b></span>' +
       '      <span>已完成 <b data-pc-n-done style="color:#6ee7b7">0</b></span>' +
-      '      <button data-pc-dlg-close style="background:none;border:none;color:var(--pc-text);cursor:pointer;padding:2px 6px;font-size:14px;" title="关闭">✕</button>' +
+      '      <button data-pc-dlg-close style="background:none;border:none;color:#f1f5f9;cursor:pointer;padding:2px 6px;font-size:15px;" title="关闭">✕</button>' +
       '    </div>' +
       '  </div>' +
       '  <div style="display:flex;flex:1;min-height:0;">' +
@@ -558,7 +558,8 @@
     var direct = convo.filter(function (x) { return !x.selector; });
     var comp = convo.filter(function (x) { return !!x.selector; });
     function renderIdx(title, list) {
-      idx.appendChild(el("div", null, "<div style='font-size:10px;font-weight:700;color:var(--pc-muted);margin:8px 0 4px;text-transform:uppercase;'>" + title + "</div>"));
+      // 2026-08-22 用户要求：分组标题显示实时数量（直接对话 N / 组件对话 N）
+      idx.appendChild(el("div", null, "<div style='font-size:10px;font-weight:700;color:var(--pc-text);margin:8px 0 4px;text-transform:uppercase;'>" + title + " <span style='color:#fcd34d;font-size:10px;'>(" + list.length + ")</span></div>"));
       if (!list.length) idx.appendChild(el("p", null, "<span style='font-size:11px;color:rgba(148,163,184,.4)'>无</span>"));
       list.forEach(function (it) {
         var b = el("button", "pc-btn", null);
