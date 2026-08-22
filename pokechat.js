@@ -107,10 +107,11 @@
     // ⚠️ 2026-08-22 修复：弹窗的 hidden 加在自身（如 data-pokechat='queue' 元素），
     // 原选择器 [data-pokechat] .hidden 是后代选择器不匹配自身 + 弹窗内联 display:flex 覆盖 → 关不掉
     "[data-pokechat].hidden, [data-pokechat] .hidden { display:none !important; }",
+    // 2026-08-22 修复：badge 文字太暗看不清 → 亮色纯文字 + 稍实背景
     "[data-pokechat] .pc-badge { border-radius:6px; padding:1px 6px; font-size:10px; font-weight:700; }",
-    "[data-pokechat] .pc-badge-done { background:rgba(52,211,153,.15); color:var(--pc-green); }",
-    "[data-pokechat] .pc-badge-proc { background:rgba(251,191,36,.15); color:var(--pc-warn); }",
-    "[data-pokechat] .pc-badge-wait { background:rgba(148,163,184,.15); color:var(--pc-muted); }",
+    "[data-pokechat] .pc-badge-done { background:rgba(52,211,153,.25); color:#6ee7b7; }",
+    "[data-pokechat] .pc-badge-proc { background:rgba(251,191,36,.25); color:#fcd34d; }",
+    "[data-pokechat] .pc-badge-wait { background:rgba(148,163,184,.25); color:#cbd5e1; }",
     ".pokechat-picking, .pokechat-picking * { cursor: crosshair !important; }",
     ".pokechat-picking *:hover { outline:1px dashed hsl(15 89% 56% / .55) !important; outline-offset:1px; }",
     ".pokechat-picking *:hover:not(:has(*:hover)) { outline:2px solid var(--pc-primary) !important; outline-offset:1px; }",
@@ -490,11 +491,11 @@
       '<div class="pc-glass" style="width:768px;max-width:96vw;height:75vh;display:flex;flex-direction:column;overflow:hidden;border-radius:16px;">' +
       '  <div style="padding:10px 16px;border-bottom:1px solid var(--pc-border);display:flex;justify-content:space-between;align-items:center;">' +
       '    <b style="font-size:14px;">反馈对话</b>' +
-      '    <div style="font-size:11px;color:var(--pc-muted);display:flex;gap:14px;align-items:center;">' +
-      '      <span>等待 <b data-pc-n-pending style="color:var(--pc-warn)">0</b></span>' +
-      '      <span>处理中 <b data-pc-n-processing style="color:var(--pc-amber)">0</b></span>' +
-      '      <span>已完成 <b data-pc-n-done style="color:var(--pc-green)">0</b></span>' +
-      '      <button data-pc-dlg-close style="background:none;border:none;color:var(--pc-muted);cursor:pointer;padding:2px 6px;font-size:14px;" title="关闭">✕</button>' +
+      '    <div style="font-size:11px;color:var(--pc-text);display:flex;gap:14px;align-items:center;">' +
+      '      <span>等待 <b data-pc-n-pending style="color:#fcd34d">0</b></span>' +
+      '      <span>处理中 <b data-pc-n-processing style="color:#fcd34d">0</b></span>' +
+      '      <span>已完成 <b data-pc-n-done style="color:#6ee7b7">0</b></span>' +
+      '      <button data-pc-dlg-close style="background:none;border:none;color:var(--pc-text);cursor:pointer;padding:2px 6px;font-size:14px;" title="关闭">✕</button>' +
       '    </div>' +
       '  </div>' +
       '  <div style="display:flex;flex:1;min-height:0;">' +
