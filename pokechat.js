@@ -239,14 +239,14 @@
   }
 
   /* ================= 队列编辑 ================= */
-  function openEdit(it) {
+  function openEdit(it, readonly) {
     editing = it; note = it.note;
     // 2026-08-22 修复：编辑弹窗要**叠加**在 IM 窗口之上（React 原版两层同显）。
     // 只关备注弹窗，保留 IM 窗口；z-index 由 buildEditDialog 的 2147483001 保证在上层
     var noteDlg = $("[data-pokechat='note']");
     if (noteDlg) noteDlg.classList.add("hidden");
-    // 已提交的反馈（仅 pending 可编辑）：打开编辑时标记 editing=true，AI 循环跳过（2026-08-22 用户要求）
-    if (it.ts && !it.local) {
+    // 仅 pending 可编辑：打开编辑时标记 editing=true，AI 循环跳过（2026-08-22 用户要求）
+    if (!readonly && it.ts && !it.local) {
       fetch(api("/") + "/" + it.ts, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ editing: true }) })
         .catch(function () {});
     }
@@ -254,9 +254,18 @@
     $("[data-pc-path]", m).textContent = it.path;
     $("[data-pc-sel]", m).textContent = it.selector;
     $("[data-pc-txt]", m).textContent = it.text || "（无文本）";
-    $("[data-pc-note]", m).value = it.note;
+    var ta = $("[data-pc-note]", m);
+    ta.value = it.note;
+    // 2026-08-22 用户要求：处理中/已完成点开=只读（能看不能发送）
+    ta.readOnly = !!readonly;
+    ta.style.background = readonly ? "rgba(255,255,255,.35)" : "rgba(255,255,255,.75)";
     var save = $("[data-pc-save]", m);
-    if (save) { save.disabled = !it.note.trim(); save.style.opacity = it.note.trim() ? "1" : ".5"; }
+    var title = $("[data-pc-edit-title]", m);
+    if (title) title.textContent = readonly ? "查看反馈" : "编辑队列条目";
+    if (save) {
+      save.style.display = readonly ? "none" : "";
+      save.disabled = !it.note.trim(); save.style.opacity = it.note.trim() ? "1" : ".5";
+    }
     m.classList.remove("hidden");
   }
   function closeEdit() {
@@ -458,7 +467,7 @@
       '  border:1px solid rgba(255,255,255,.25); box-shadow:0 12px 30px rgba(0,0,0,.35);' +
       '  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); color:hsl(222 47% 8%);">' +
       '  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
-      '    <span style="font-weight:700;font-size:14px;color:hsl(222 47% 10%);">编辑队列条目</span>' +
+      '    <span data-pc-edit-title style="font-weight:700;font-size:14px;color:hsl(222 47% 10%);">编辑队列条目</span>' +
       '    <button data-pc-close style="background:none;border:none;color:hsl(222 20% 35%);cursor:pointer;padding:4px;display:flex;" title="取消">' +
       '      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>' +
       '    </button>' +
@@ -656,7 +665,7 @@
         "    <div style='margin-top:2px;color:#f1f5f9;'>" + esc(it.note) + "</div>" +
         (it.path ? "    <div style='margin-top:3px;font-size:9px;color:#cbd5e1;background:rgba(15,23,42,.6);border-radius:4px;padding:1px 5px;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>" + esc(it.path) + "</div>" : "") +
         "    <div style='margin-top:5px;'><span class='pc-badge " + stCls + "' style='display:inline-block;'>" + stLabel + "</span>" +
-        (editable ? " <span style='font-size:9px;color:var(--pc-muted);margin-left:4px;'>点击编辑</span>" : "") + "</div>" +
+        (st !== "done" ? " <span style='font-size:9px;color:var(--pc-muted);margin-left:4px;'>" + (editable ? "点击编辑" : "点击查看") + "</span>" : "") + "</div>" +
         "  </div>" +
         "</div>" +
         // AI（左，主色淡橙 + AI 徽标 + 时间戳）——整体方案：背景提实 + 边框（2026-08-22）
@@ -670,11 +679,9 @@
         "  </div>" +
         "</div>";
       body.appendChild(wrap);
-      // 等待/处理中的用户消息可点击编辑（2026-08-22 用户要求）
-      if (st !== "done") {
-        var ub = wrap.querySelector("[data-pc-ub='" + String(it.ts) + "']");
-        if (ub) ub.onclick = function () { openEdit(it); };
-      }
+      // 2026-08-22 用户要求：等待=可编辑；处理中/已完成=可点开但**只读**（能看不能发送）
+      var ub = wrap.querySelector("[data-pc-ub='" + String(it.ts) + "']");
+      if (ub) ub.onclick = function () { openEdit(it, st !== "pending"); };
     });
     // 2026-08-22 用户要求：只有**主动滚动离开底部**（userScrolledAway）才不自动跳底；
     // 发消息/编辑历史等主动操作会重置标志 → 自动到底部
