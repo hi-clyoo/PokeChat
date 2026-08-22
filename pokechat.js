@@ -645,23 +645,25 @@
       // 用户（右，圆角右上小）——对齐项目版 bg-secondary/25 + 状态徽标
       // 2026-08-22 用户要求：等待/处理中的消息可点击再编辑（pending/processing 可编辑，done 不可）
       var editable = st !== "done";
+      // 2026-08-22 整套信息层级方案（不再逐个改）：
+      // 组件选择器=橙红等宽 chip · 组件文本=橙红粗体 · 备注=亮白正文 · 页面路径=深底 chip
+      // 气泡背景提实（.10 + 边框），保证所有文字有底可读
       wrap.innerHTML =
         "<div style='display:flex;justify-content:flex-end;'>" +
-        "  <div data-pc-ub='" + esc(it.ts) + "' style='max-width:75%;background:rgba(255,255,255,.07);border-radius:16px 16px 2px 16px;padding:8px 12px;font-size:12px;" + (editable ? "cursor:pointer;border:1px dashed transparent;" : "") + "'>" +
-        // 2026-08-22 用户问「只有文本吗」：补上页面路径 + 组件选择器（数据里有，之前没渲染）
-        (it.selector ? "    <div style='font-family:monospace;font-size:10px;color:var(--pc-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>" + esc(it.selector) + "</div>" : "") +
-        "    <div style='font-weight:600;font-size:11px;'>" + esc(it.text || "") + "</div>" +
-        "    <div style='margin-top:2px;color:var(--pc-text);'>" + esc(it.note) + "</div>" +
-        (it.path ? "    <div style='margin-top:2px;font-size:9px;color:var(--pc-muted-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>页面：" + esc(it.path) + "</div>" : "") +
-        "    <span class='pc-badge " + stCls + "' style='margin-top:5px;display:inline-block;'>" + stLabel + "</span>" +
-        (editable ? " <span style='font-size:9px;color:var(--pc-muted);margin-left:4px;'>点击编辑</span>" : "") +
+        "  <div data-pc-ub='" + esc(it.ts) + "' style='max-width:78%;background:rgba(255,255,255,.10);border:1px solid var(--pc-border);border-radius:16px 16px 2px 16px;padding:8px 12px;font-size:12px;" + (editable ? "cursor:pointer;border:1px dashed rgba(255,255,255,.25);" : "") + "'>" +
+        (it.selector ? "    <div style='display:inline-block;font-family:monospace;font-size:10px;color:#fcd34d;background:rgba(252,211,77,.12);border:1px solid rgba(252,211,77,.3);border-radius:4px;padding:0 5px;margin-bottom:3px;'>" + esc(it.selector) + "</div>" : "") +
+        (it.text ? "    <div style='font-weight:700;font-size:12px;color:hsl(15 89% 65%);'>" + esc(it.text) + "</div>" : "") +
+        "    <div style='margin-top:2px;color:#f1f5f9;'>" + esc(it.note) + "</div>" +
+        (it.path ? "    <div style='margin-top:3px;font-size:9px;color:#cbd5e1;background:rgba(15,23,42,.6);border-radius:4px;padding:1px 5px;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>" + esc(it.path) + "</div>" : "") +
+        "    <div style='margin-top:5px;'><span class='pc-badge " + stCls + "' style='display:inline-block;'>" + stLabel + "</span>" +
+        (editable ? " <span style='font-size:9px;color:var(--pc-muted);margin-left:4px;'>点击编辑</span>" : "") + "</div>" +
         "  </div>" +
         "</div>" +
-        // AI（左，主色淡橙 + AI 徽标 + 时间戳）——对齐项目版 bg-primary/10 + 时间
+        // AI（左，主色淡橙 + AI 徽标 + 时间戳）——整体方案：背景提实 + 边框（2026-08-22）
         "<div style='display:flex;justify-content:flex-start;margin-top:5px;'>" +
-        "  <div style='max-width:75%;background:hsl(15 89% 56% / .10);border-radius:16px 16px 16px 2px;padding:8px 12px;font-size:12px;color:var(--pc-text);white-space:pre-wrap;word-break:break-word;'>" +
+        "  <div style='max-width:78%;background:hsl(15 89% 56% / .14);border:1px solid hsl(15 89% 56% / .25);border-radius:16px 16px 16px 2px;padding:8px 12px;font-size:12px;color:var(--pc-text);white-space:pre-wrap;word-break:break-word;'>" +
         "    <div style='margin-bottom:3px;display:flex;align-items:center;gap:6px;'>" +
-        "      <span style='background:hsl(15 89% 56% / .15);border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700;color:var(--pc-primary);'>AI</span>" +
+        "      <span style='background:hsl(15 89% 56% / .2);border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700;color:hsl(15 89% 70%);'>AI</span>" +
         "      <span style='font-family:monospace;font-size:10px;color:var(--pc-muted-2);'>" + time + "</span>" +
         "    </div>" +
         (st === "done" ? esc(it.conclusion || "已处理完成") : st === "processing" ? "处理中…" : "等待调度，1 分钟内开始处理") +
