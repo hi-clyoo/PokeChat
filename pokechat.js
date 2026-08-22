@@ -245,6 +245,11 @@
     // 只关备注弹窗，保留 IM 窗口；z-index 由 buildEditDialog 的 2147483001 保证在上层
     var noteDlg = $("[data-pokechat='note']");
     if (noteDlg) noteDlg.classList.add("hidden");
+    // 已提交的反馈（pending/processing）：打开编辑时标记 editing=true，AI 循环跳过（2026-08-22 用户要求）
+    if (it.ts && !it.local) {
+      fetch(api("/") + "/" + it.ts, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ editing: true }) })
+        .catch(function () {});
+    }
     var m = $("[data-pokechat='edit']");
     $("[data-pc-path]", m).textContent = it.path;
     $("[data-pc-sel]", m).textContent = it.selector;
@@ -254,11 +259,26 @@
     if (save) { save.disabled = !it.note.trim(); save.style.opacity = it.note.trim() ? "1" : ".5"; }
     m.classList.remove("hidden");
   }
-  function closeEdit() { $("[data-pokechat='edit']").classList.add("hidden"); editing = null; }
+  function closeEdit() {
+    $("[data-pokechat='edit']").classList.add("hidden");
+    if (editing && editing.ts && !editing.local) {
+      fetch(api("/") + "/" + editing.ts, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ editing: false }) })
+        .catch(function () {});
+    }
+    editing = null;
+  }
   function saveEdit() {
     if (!editing) return;
-    queue = queue.map(function (x) { return x.ts === editing.ts ? Object.assign({}, x, { note: note }) : x; });
-    saveQueue(); renderFloating(); closeEdit();
+    if (editing.ts && !editing.local) {
+      // 已提交反馈：更新备注 + 清除 editing 标记（AI 恢复处理）
+      fetch(api("/") + "/" + editing.ts, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note: note, editing: false }) })
+        .then(function () { refreshStatus(); toast("已更新，AI 将按新备注处理"); })
+        .catch(function () { toast("更新失败，稍后重试"); });
+      closeEdit();
+    } else {
+      queue = queue.map(function (x) { return x.ts === editing.ts ? Object.assign({}, x, { note: note }) : x; });
+      saveQueue(); renderFloating(); closeEdit();
+    }
   }
   function removeQueueItem(ts) { queue = queue.filter(function (x) { return x.ts !== ts; }); saveQueue(); renderFloating(); }
   function clearQueue() { queue = []; saveQueue(); renderFloating(); }
@@ -623,12 +643,15 @@
       var tsStr = String(it.ts || "");
       var time = tsStr.length >= 12 ? tsStr.slice(8, 10) + ":" + tsStr.slice(10, 12) : "";
       // 用户（右，圆角右上小）——对齐项目版 bg-secondary/25 + 状态徽标
+      // 2026-08-22 用户要求：等待/处理中的消息可点击再编辑（pending/processing 可编辑，done 不可）
+      var editable = st !== "done";
       wrap.innerHTML =
         "<div style='display:flex;justify-content:flex-end;'>" +
-        "  <div style='max-width:75%;background:rgba(255,255,255,.07);border-radius:16px 16px 2px 16px;padding:8px 12px;font-size:12px;'>" +
+        "  <div data-pc-ub='" + esc(it.ts) + "' style='max-width:75%;background:rgba(255,255,255,.07);border-radius:16px 16px 2px 16px;padding:8px 12px;font-size:12px;" + (editable ? "cursor:pointer;border:1px dashed transparent;" : "") + "'>" +
         "    <div style='font-weight:600;font-size:11px;'>" + esc(it.text || it.selector) + "</div>" +
         "    <div style='margin-top:2px;color:var(--pc-text);'>" + esc(it.note) + "</div>" +
         "    <span class='pc-badge " + stCls + "' style='margin-top:5px;display:inline-block;'>" + stLabel + "</span>" +
+        (editable ? " <span style='font-size:9px;color:var(--pc-muted);margin-left:4px;'>点击编辑</span>" : "") +
         "  </div>" +
         "</div>" +
         // AI（左，主色淡橙 + AI 徽标 + 时间戳）——对齐项目版 bg-primary/10 + 时间
@@ -642,6 +665,11 @@
         "  </div>" +
         "</div>";
       body.appendChild(wrap);
+      // 等待/处理中的用户消息可点击编辑（2026-08-22 用户要求）
+      if (st !== "done") {
+        var ub = wrap.querySelector("[data-pc-ub='" + String(it.ts) + "']");
+        if (ub) ub.onclick = function () { openEdit(it); };
+      }
     });
     // 2026-08-22 用户要求：滚动查看历史时新消息不强制跳底（打断阅读），
     // 仅当用户已在底部时自动跟随；离开底部显示「回到底部」按钮
