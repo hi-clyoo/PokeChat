@@ -316,11 +316,6 @@
     wrap.setAttribute("data-pokechat", "");
     wrap.style.cssText = "position:fixed;bottom:80px;left:16px;z-index:2147483000;display:flex;flex-direction:column;align-items:flex-start;gap:8px;";
 
-    // 任务按钮（上）——轮询时显示
-    var taskBtn = el("button", "pc-btn pc-glass hidden", "任务（0）");
-    taskBtn.style.cssText = "color:#0b1220;font-weight:700;";
-    wrap.appendChild(taskBtn);
-
     // 队列 + 🎯（下）—— 对齐项目版：队列按钮带处理中 ping 点；🎯 用 lucide MousePointerClick SVG 图标
     var row = el("div", null);
     row.style.cssText = "display:flex;align-items:center;gap:8px;";
@@ -363,12 +358,13 @@
       document.head.appendChild(pk);
     }
 
-    // 任务提示条（右下角，任务进行中提示）
+    // 2026-08-22 修复：任务提示条从右下角移到**左下角悬浮区、反馈队列上方**（对齐本地项目布局，
+    // 之前右下角显示被悬浮按钮挡住）
     var taskBar = el("div", "pc-glass hidden");
     taskBar.setAttribute("data-pokechat", "taskbar");
-    taskBar.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:99989;padding:8px 14px;font-size:12px;color:#fbbf24;display:flex;align-items:center;gap:8px;";
-    taskBar.innerHTML = '<span class="pc-spin" style="display:inline-block;width:12px;height:12px;border:2px solid rgba(251,191,36,.3);border-top-color:#fbbf24;border-radius:50%;animation:pc-spin 1s linear infinite;"></span><span data-pc-task-text>任务处理中…</span>';
-    document.body.appendChild(taskBar);
+    taskBar.style.cssText = "display:none;padding:6px 12px;font-size:11px;color:#fbbf24;align-items:center;gap:6px;";
+    taskBar.innerHTML = '<span class="pc-spin" style="display:inline-block;width:10px;height:10px;border:2px solid rgba(251,191,36,.3);border-top-color:#fbbf24;border-radius:50%;animation:pc-spin 1s linear infinite;"></span><span data-pc-task-text>任务处理中…</span>';
+    wrap.insertBefore(taskBar, wrap.firstChild);
     if (!document.getElementById("pc-spin-kf")) {
       var kf = document.createElement("style");
       kf.id = "pc-spin-kf";
@@ -733,8 +729,8 @@
           var running = d.pending.length + d.processing.length;
           var bar = document.querySelector("[data-pokechat='taskbar']");
           if (bar) {
-            if (running > 0) { bar.classList.remove("hidden"); $("[data-pc-task-text]", bar).textContent = "任务处理中（等待 " + d.pending.length + " · 处理中 " + d.processing.length + "）"; }
-            else bar.classList.add("hidden");
+            if (running > 0) { bar.style.display = "flex"; $("[data-pc-task-text]", bar).textContent = "任务处理中（等待 " + d.pending.length + " · 处理中 " + d.processing.length + "）"; }
+            else bar.style.display = "none";
           }
           if (JSON.stringify(d) !== JSON.stringify(status)) { status = d; renderQueueDialog(); }
         }).catch(function () {});
