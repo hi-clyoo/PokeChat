@@ -492,7 +492,7 @@
     // 100% 对齐项目版 IM 窗口：glass rounded-2xl h-[75vh] max-w-3xl +
     // 顶部计数 + 左索引（直接/组件分组）+ 右对话（用户右/AI 左）+ 待发送区 + 直接发送
     d.innerHTML =
-      '<div class="pc-glass" style="width:768px;max-width:96vw;height:75vh;display:flex;flex-direction:column;overflow:hidden;border-radius:16px;position:relative;">' +
+      '<div class="pc-glass" style="width:883px;max-width:96vw;height:75vh;display:flex;flex-direction:column;overflow:hidden;border-radius:16px;position:relative;">' +
       '  <div style="padding:10px 16px;border-bottom:1px solid var(--pc-border);display:flex;justify-content:space-between;align-items:center;">' +
       '    <b style="font-size:14px;">反馈对话</b>' +
       '    <div style="font-size:12px;font-weight:600;color:#f1f5f9;display:flex;gap:14px;align-items:center;">' +
