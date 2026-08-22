@@ -269,6 +269,7 @@
   }
   function saveEdit() {
     if (!editing) return;
+    userScrolledAway = false;  // 2026-08-22：编辑保存后自动到底部
     if (editing.ts && !editing.local) {
       // 已提交反馈：更新备注 + 清除 editing 标记（AI 恢复处理）
       fetch(api("/") + "/" + editing.ts, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note: note, editing: false }) })
@@ -285,6 +286,7 @@
   function sendQueue() {
     if (!queue.length) return;
     var items = queue.map(function (q) { return { path: q.path, selector: q.selector, text: q.text, note: q.note }; });
+    userScrolledAway = false;  // 2026-08-22：批量发送后自动到底部
     if (hasBackend()) {
       post(api("/"), { items: items }, function () { queue = []; saveQueue(); renderFloating(); refreshStatus(); toast("已发送 " + items.length + " 条反馈，等待 AI 处理"); });
     } else {
@@ -545,6 +547,7 @@
   function sendDirectMsg() {
     var m = directMsg.trim();
     if (!m) return;
+    userScrolledAway = false;  // 2026-08-22：发消息后自动到底部
     sendFeedback([{ path: location.pathname + location.search, selector: "", text: "", note: m }]);
     directMsg = "";
     $("[data-pc-dmsg]").value = "";
@@ -677,30 +680,37 @@
         if (ub) ub.onclick = function () { openEdit(it); };
       }
     });
-    // 2026-08-22 用户要求：滚动查看历史时新消息不强制跳底（打断阅读），
-    // 仅当用户已在底部时自动跟随；离开底部显示「回到底部」按钮
-    var nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
-    if (nearBottom) {
+    // 2026-08-22 用户要求：只有**主动滚动离开底部**（userScrolledAway）才不自动跳底；
+    // 发消息/编辑历史等主动操作会重置标志 → 自动到底部
+    if (!userScrolledAway || nearBottom(body)) {
       body.scrollTop = body.scrollHeight;
       var sb = $("[data-pc-scrollbtn]", d);
       if (sb) sb.style.display = "none";
+      userScrolledAway = false;
     } else {
       var sb2 = $("[data-pc-scrollbtn]", d);
       if (sb2) sb2.style.display = "block";
     }
   }
 
+  var userScrolledAway = false;  // 2026-08-22：用户主动滚动离开底部时才不自动跳底
+  function nearBottom(body) {
+    return body.scrollHeight - body.scrollTop - body.clientHeight < 60;
+  }
   function setupScrollBtn(d) {
     var body = $("[data-pc-body]", d);
     var btn = $("[data-pc-scrollbtn]", d);
     if (!body || !btn) return;
     body.addEventListener("scroll", function () {
-      var nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
-      btn.style.display = nearBottom ? "none" : "block";
+      var nb = nearBottom(body);
+      // 只有用户**手动**滚动且离开底部 → 标记；回到底部自动清除
+      userScrolledAway = !nb;
+      btn.style.display = nb ? "none" : "block";
     });
     btn.onclick = function () {
       body.scrollTo({ top: body.scrollHeight, behavior: "smooth" });
       btn.style.display = "none";
+      userScrolledAway = false;
     };
   }
 
