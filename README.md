@@ -133,6 +133,46 @@ python3 server.py          # http://127.0.0.1:8123
 Vibe-Astock 已用此方式把内置反馈系统整体切换为 PokeChat（`frontend/index.html` 引入，
 Layout 内置实现移除）。
 
+## 🏷️ 组件标识（data-name）规范（2026-08-23）
+
+选择组件时，PokeChat 会**向上查找最近的 `data-name` 属性**，显示在反馈弹窗「名称」行
+（没有则隐藏该行）并随反馈数据提交（`name` 字段），方便 AI 精确定位组件。
+
+`data-name` 是**通用组件标识规范**（不只是 PokeChat——测试/调试/自动化脚本都可读），
+PokeChat 只是消费者之一。接入项目建议遵循：
+
+### 命名规则
+
+```text
+模块-类型-标识
+```
+
+| 场景 | 示例 |
+|---|---|
+| 唯一标识（指标 key / 股票代码 / 分组名） | `si-item-hist_sideways`、`si-group-历史形态`、`paper-row-600721` |
+| 循环组件（无稳定业务标识） | 用序号：`paper-row-0`、`paper-closed-row-2`、`compare-row-5`、`first-board-1` |
+| 容器/区块 | `paper-stats`、`paper-holdings`、`compare-table`、`stock-news` |
+
+### 添加规则
+
+1. **粒度**：只给关键可交互组件 / 循环项 / 语义区块加，不需要每个元素都加——
+   点选元素内部任意位置时，自动向上命中最近的 data-name
+2. **唯一标识优先**：循环项有关键业务标识（指标 key、股票代码）时用业务标识；
+   没有稳定标识的纯展示循环项用序号（数据变化后序号错位可接受，配合页面/内容可索引）
+3. **稳定优先**：标识不含易变内容（如实时价格、时间戳），避免每次反馈都变
+4. 组件删除/重命名时同步更新对应 data-name
+
+### React 示例
+
+```tsx
+{indicators.map((it) => (
+  <div key={it.key} data-name={`si-item-${it.key}`} className="card">...</div>
+))}
+{rows.map((r, i) => (
+  <tr key={r.code} data-name={`paper-row-${i}`}>...</tr>
+))}
+```
+
 ### React / Vue / 任何框架
 
 `pokechat.js` 是**框架无关**的原生 DOM 实现，直接 `<script>` 引入后 `PokeChat.init()` 即可，不依赖框架运行时。

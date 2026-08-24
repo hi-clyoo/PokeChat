@@ -128,6 +128,16 @@
   ].join("\n");
 
   /* ================= 选择模式（层级高亮） ================= */
+  // 2026-08-23（1105xx）：向上找最近的 data-name 属性（组件标识，反馈里可见）
+  function pickName(node) {
+    var el = node;
+    while (el && el.getAttribute) {
+      var dn = el.getAttribute("data-name");
+      if (dn) return dn;
+      el = el.parentElement;
+    }
+    return "";
+  }
   function pickInfo(node) {
     var cls = Array.prototype.slice.call(node.classList || []).slice(0, 3).join(".");
     var txt = (node.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
@@ -135,9 +145,12 @@
       tag: node.tagName.toLowerCase(),
       selector: node.tagName.toLowerCase() + (node.id ? "#" + node.id : "") + (cls ? "." + cls : ""),
       text: txt,
+      name: pickName(node),
     };
   }
-  function clearOutline() { if (selectedEl) { selectedEl.style.outline = ""; selectedEl = null; } }
+  function clearOutline() {
+    if (selectedEl) { selectedEl.style.outline = ""; selectedEl.style.outlineOffset = ""; selectedEl = null; }
+  }
   function startPicking() {
     if (picking) return;
     picking = true;
@@ -167,8 +180,11 @@
     if (!t) return;
     clearOutline();
     selectedEl = t;
-    t.style.outline = "2px solid #22c55e";
-    t.style.outlineOffset = "1px";
+    // 2026-08-22（183848）：内联样式必须带 !important——否则被 CSS 的
+    // .pokechat-picking *:hover 虚线（!important）覆盖，canvas 永远只有虚线。
+    // 颜色用主题主色 var(--pc-primary)（跟随 IM 主题）。
+    t.style.outline = "2px solid var(--pc-primary) !important";
+    t.style.outlineOffset = "1px !important";
   }
   function onClick(e) {
     var t = e.target;
@@ -213,6 +229,9 @@
     var m = $("[data-pokechat='note']");
     $("[data-pc-path]", m).textContent = location.pathname + location.search;
     $("[data-pc-sel]", m).textContent = info.selector;
+    // 2026-08-23（1105xx）：弹窗显示组件 data-name（无则隐藏该行）
+    var nmEl = $("[data-pc-name]", m);
+    if (nmEl) { nmEl.textContent = info.name || ""; nmEl.closest("div").style.display = info.name ? "" : "none"; }
     $("[data-pc-txt]", m).textContent = info.text || "（无文本）";
     var ta = $("[data-pc-note]", m);
     ta.value = "";
@@ -230,7 +249,7 @@
     var ta = $("[data-pokechat='note'] [data-pc-note]");
     var v = ta ? (ta.value || "") : (note || "");
     if (!picked || !v.trim()) return;
-    queue.push({ path: location.pathname + location.search, selector: picked.selector, text: picked.text, note: v, ts: Date.now() });
+    queue.push({ path: location.pathname + location.search, selector: picked.selector, text: picked.text, note: v, name: picked.name, ts: Date.now() });
     saveQueue(); renderFloating();
     closeNoteDialog();
     toast("已加入反馈队列（共 " + queue.length + " 条），Ctrl+F 可再次选择");
@@ -239,14 +258,14 @@
     var ta = $("[data-pokechat='note'] [data-pc-note]");
     var v = ta ? (ta.value || "") : (note || "");
     if (!picked || !v.trim()) return;
-    sendFeedback([{ path: location.pathname + location.search, selector: picked.selector, text: picked.text, note: v }]);
+    sendFeedback([{ path: location.pathname + location.search, selector: picked.selector, text: picked.text, note: v, name: picked.name }]);
     closeNoteDialog();
   }
   function sendFeedback(items) {
     if (hasBackend()) {
       post(api("/"), { items: items }, function () { refreshStatus(); toast("已发送给 AI，等待处理"); });
     } else {
-      items.forEach(function (it) { queue.push({ path: it.path, selector: it.selector, text: it.text, note: it.note, ts: Date.now(), local: true }); });
+      items.forEach(function (it) { queue.push({ path: it.path, selector: it.selector, text: it.text, note: it.note, name: it.name, ts: Date.now(), local: true }); });
       saveQueue(); renderFloating(); toast("本地模式：已记录在 localStorage");
     }
   }
@@ -266,6 +285,9 @@
     var m = $("[data-pokechat='edit']");
     $("[data-pc-path]", m).textContent = it.path;
     $("[data-pc-sel]", m).textContent = it.selector;
+    // 2026-08-23（1105xx）：编辑/查看弹窗也显示组件名称
+    var nmEl = $("[data-pc-name]", m);
+    if (nmEl) { nmEl.textContent = it.name || ""; nmEl.closest("div").style.display = it.name ? "" : "none"; }
     $("[data-pc-txt]", m).textContent = it.text || "（无文本）";
     var ta = $("[data-pc-note]", m);
     ta.value = it.note;
@@ -320,7 +342,7 @@
   function clearQueue() { queue = []; saveQueue(); renderFloating(); }
   function sendQueue() {
     if (!queue.length) return;
-    var items = queue.map(function (q) { return { path: q.path, selector: q.selector, text: q.text, note: q.note }; });
+    var items = queue.map(function (q) { return { path: q.path, selector: q.selector, text: q.text, note: q.note, name: q.name }; });
     userScrolledAway = false;  // 2026-08-22：批量发送后自动到底部
     if (hasBackend()) {
       post(api("/"), { items: items }, function () { queue = []; saveQueue(); renderFloating(); refreshStatus(); toast("已发送 " + items.length + " 条反馈，等待 AI 处理"); });
@@ -441,6 +463,7 @@
       '  <div style="margin-bottom:8px;background:rgba(255,255,255,.55);border-radius:9px;padding:8px 10px;font-size:11px;color:hsl(222 25% 30%);line-height:1.6;">' +
       '    <div>页面：<span style="font-family:monospace;color:hsl(222 45% 12%);font-weight:600;" data-pc-path></span></div>' +
       '    <div>组件：<span style="font-family:monospace;color:hsl(222 45% 12%);font-weight:600;" data-pc-sel></span></div>' +
+      '    <div>名称：<span style="font-family:monospace;color:hsl(222 45% 12%);font-weight:600;" data-pc-name></span></div>' +
       '    <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title=""><span>内容：</span><span data-pc-txt></span></div>' +
       '  </div>' +
       '  <textarea data-pc-note rows="6" placeholder="备注：想怎么改？（如：把这里改成红色、加个筛选按钮…）Enter 提交，Shift+Enter 换行" style="margin-bottom:8px;resize:none;width:100%;box-sizing:border-box;' +
@@ -504,6 +527,7 @@
       '  <div style="margin-bottom:8px;background:rgba(255,255,255,.55);border-radius:9px;padding:8px 10px;font-size:11px;color:hsl(222 25% 30%);line-height:1.6;">' +
       '    <div>页面：<span style="font-family:monospace;color:hsl(222 45% 12%);font-weight:600;" data-pc-path></span></div>' +
       '    <div>组件：<span style="font-family:monospace;color:hsl(222 45% 12%);font-weight:600;" data-pc-sel></span></div>' +
+      '    <div>名称：<span style="font-family:monospace;color:hsl(222 45% 12%);font-weight:600;" data-pc-name></span></div>' +
       '    <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title=""><span>内容：</span><span data-pc-txt></span></div>' +
       '  </div>' +
       '  <textarea data-pc-note rows="6" placeholder="备注：想怎么改？Enter 保存 · Shift+Enter 换行" style="margin-bottom:8px;resize:none;width:100%;box-sizing:border-box;' +
@@ -734,7 +758,8 @@
         var st = it.conclusion ? "done" : (status.processing.indexOf(it) >= 0 ? "processing" : "pending");
         // 2026-08-22 修复：组件反馈条目索引始终显示组件信息（selector），note 作为次要附注——
         // 之前 note 优先导致有 note 时组件选择器信息被吞
-        var idxLabel = it.selector ? (it.note ? it.selector + "：" + it.note : it.selector)
+        // 2026-08-23（1105xx）：有 data-name 时优先显示名称
+        var idxLabel = it.selector ? ((it.name || it.selector) + (it.note ? "：" + it.note : ""))
           : (it.note || it.text || it.path);
         b.innerHTML = "<span style='display:inline-block;width:6px;height:6px;border-radius:50%;background:" +
           (st === "done" ? "var(--pc-green)" : st === "processing" ? "var(--pc-amber)" : "var(--pc-muted)") + ";margin-right:5px;'></span>" + esc(idxLabel);
