@@ -220,6 +220,39 @@ PokeChat 前端 + 后端负责「收集反馈」；**真正处理反馈的是 AI
 
 > 纯前端（不配 endpoint）时没有 AI 处理端，反馈只保存在 localStorage，属于"记录模式"。
 
+### ⚠️ 多项目 / 多工作目录同时使用（2026-09-14 实测踩坑）
+
+同一个 AI agent 会话里接**多个项目**（例如同一份代码的多个 checkout）时，有两个坑会让反馈
+**静默丢失**——**没有任何报错**，最难查的一类：
+
+| 坑 | 失败场景 | 正确做法 |
+|---|---|---|
+| **状态基线文件全局共用** | 事件监听脚本（watcher）用「已见**文件名**」做基线。基线文件是全局一个路径时：A 项目先收到 `120000.json`，B 项目收到**自己**的同名反馈 → 被当成「已见」→ `新文件 - 已见` 为空 → **watcher 永不触发** | 基线文件**必须按项目分开**（路径带项目目录名/哈希）。文件名精度只到秒，跨项目撞名非常常见 |
+| **队列目录共用** | 多个 checkout 共用同一个队列目录（如都把 `data/` 指向同一处）时，**谁启动 loop 就用谁的代码处理全部反馈** → 跨项目误改 | 队列放**各自仓库根**下（如 `<repo>/ui_feedback/`），**不要**走共享的 `data/` |
+
+**自检清单**（动这几处代码时逐个核）：
+1. watcher / loop 的**收件箱目录** ∈ 本项目
+2. watcher 的**状态基线文件** ∈ 本项目（最容易漏的一个）
+3. 状态查询接口：不传项目参数时落到本项目；传了参数才是**只读**看别的项目
+4. 提交（`POST`）**永远只写本项目**——跨项目只能看不能改
+
+**平台差异**（写 watcher 时）：
+
+| 平台 | 监听方式 | 启动 |
+|---|---|---|
+| macOS / BSD | `kqueue`（`EVFILT_VNODE` + `NOTE_WRITE`）阻塞监听目录变化，毫秒级、**真事件驱动** | `python3 scripts/watch.py` |
+| Windows | **没有 kqueue** → 回退 **2 秒轮询**（`os.listdir` 比对文件名） | `python scripts\watch.py --poll` |
+
+**两个容易踩的细节**：
+
+- 事件驱动的 watcher 发现新反馈后**必须退出**——**「退出」本身就是给 agent 的通知信号**。
+  写成死循环就会永远不退出、也就永远不会通知。代价是：**每处理完一条都要重启一次**。
+- **Windows 控制台是 GBK**：打印含中文的反馈 JSON 时，`ensure_ascii=False` 会乱码，严重时
+  `UnicodeEncodeError` **直接崩掉**（那就永远等不到通知）→ 脚本开头加
+  `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`。
+  附带一个：Python 原生把 `/tmp/x.json` 解析成**盘符根** `D:\tmp\x.json`，而 Git Bash 的 `/tmp`
+  是**另一个目录**——写死 `/tmp` 的路径在两端不是同一个文件，跨工具排查时会看岔。
+
 ## 🔧 第三方项目接入 FAQ / 排查
 
 | 现象 | 原因 / 排查 |
@@ -229,6 +262,7 @@ PokeChat 前端 + 后端负责「收集反馈」；**真正处理反馈的是 AI
 | **点击发送 / 直接发送无效** | 1) 未配置 `endpoint` 时是**本地模式**：反馈只写入 localStorage（打开反馈队列可见），不会真的发送——要 AI 处理必须配 endpoint + AI loop；2) 配了 endpoint：检查浏览器控制台 Network 里 POST `/api/feedback` 是否 200（CORS 需服务端允许跨域，本项目 server.py 已带 `Access-Control-Allow-Origin: *`）；3) 按钮被项目 CSS 遮住（z-index 低于项目元素） |
 | **无 AI 回复（一直等待调度）** | **PokeChat 前端只负责收集，处理需要 AI agent loop**（Claude Code 或任意 LLM 工作流轮询 `/api/feedback/status` 处理）——详见下方「AI 处理端接入」。纯前端（无 endpoint）模式下没有 AI，属"记录模式" |
 | **悬浮按钮不显示** | 检查是否在 iframe/shadow DOM 内（PokeChat 注入 `document.body`，iframe 内互不可见）；或项目 `body` 未就绪时调用 `init`（新版已自动等待 DOMContentLoaded） |
+| **多项目时反馈被静默吞掉** | 事件监听脚本的**状态基线文件是全局共用的** → 跨项目同名文件被当成「已见」，watcher 永不触发且**无任何报错**。修：基线文件路径带项目标识。详见上方「多项目 / 多工作目录同时使用」 |
 
 **接入检查清单**：
 1. `PokeChat.init({ endpoint })` 在 DOM 就绪后调用（或直接调，新版自动等待）
