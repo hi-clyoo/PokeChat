@@ -53,11 +53,30 @@ PokeChat 前端 + 后端只负责「收集反馈」，**必须有一个 AI agent
                                                           └──────────────┘
 ```
 
-**Claude Code 启动方式**（1 分钟）：
+**方式一：`scripts/watch.py` 事件监听（推荐，零依赖、毫秒级）**
+
+仓库自带一个纯标准库的监听脚本，**发现新反馈就打印一行 JSON 然后退出**：
+
+```bash
+python3 scripts/watch.py            # macOS / BSD：kqueue 内核事件（真·事件驱动）
+python scripts\watch.py --poll      # Windows：没有 kqueue，2 秒轮询
+python3 scripts/watch.py --once     # 调试：只报告当前 pending，不改基线
+```
+
+在 agent 侧**把它当后台任务跑**，用法要点：
+
+- 脚本**「退出」本身就是通知信号**——后台任务一结束，系统就提示「有新反馈了」，
+  agent 去读这次输出即可拿到 `file / path / selector / text / note`
+- 所以它**不能循环等第二条**（那样永远不退出、也就永远不会通知）。
+  代价是：**每处理完一条都要重启一次**
+- 启动时先把收件箱里已有的文件记进基线，**历史反馈不会一启动就触发**（要处理存量用 `--once`）
+- 状态基线文件**按项目分开**（存在系统临时目录，路径带仓库名 + 哈希），
+  同一台机器跑多个 checkout 也不会互相污染——详见下方「多项目 / 多工作目录同时使用」
+
+**方式二：Claude Code 循环任务（轮询兜底，每 1 分钟）**
 
 ```bash
 cd PokeChat
-# 方式一：Claude Code 的循环任务（每 1 分钟自动检查一次）
 claude --loop --prompt "
 检查 data/*.json（PokeChat 反馈，排除 queue.json 和子目录）：
 1. 有新反馈 → mv data/*.json data/processing/
@@ -194,9 +213,11 @@ PokeChat 前端 + 后端负责「收集反馈」；**真正处理反馈的是 AI
 → 处理（改代码/回答问题）→ 回写 conclusion → 前端对话面板显示回复
 ```
 
-**方式一：Claude Code（推荐，本项目的标准用法）**
+**方式一：`scripts/watch.py` + Claude Code（推荐，事件驱动、不轮询）**
 
-开启一个每分钟的 loop 任务（`/loop 1m` 或定时任务），prompt 用：
+把仓库自带的 `scripts/watch.py` 当后台任务跑（见上方「启动 AI loop」）——
+**它退出 = 有新反馈**。收到通知后按这个 prompt 处理；若想退回每分钟的
+`/loop 1m` 轮询任务，prompt 相同：
 
 ```text
 检查 PokeChat 反馈：ls data/*.json（根目录，不含子目录）。
@@ -285,6 +306,8 @@ pokechat/
 ├── index.html      # Demo 页（可直接打开）
 ├── pokechat.js     # 核心组件（原生 JS，零依赖）
 ├── server.py       # 极简后端（纯标准库）
+├── scripts/
+│   └── watch.py    # 反馈队列事件监听（给 AI agent loop 用；纯标准库）
 ├── README.md
 └── LICENSE         # MIT
 ```
