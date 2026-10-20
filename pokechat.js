@@ -3,12 +3,14 @@
  *
  * 用法：<script src="pokechat.js"></script>
  *       PokeChat.init({ endpoint: "http://127.0.0.1:8123" });  // 可选：配后端后发送给 AI 并轮询回复
+ *       PokeChat.init({ endpoint: "http://127.0.0.1:8123", directSend: false });  // 旧的队列模式
  *
  * 功能（对齐项目版）：
  *   1. 🎯 选择模式：悬停层级高亮（上级虚线 / 最内层实线）→ 点击 → 备注弹窗
- *   2. 备注弹窗：Enter 加入队列 / Shift+Enter 换行 / Ctrl+Enter 直接发送 /
+ *   2. 备注弹窗：directSend 默认 true —— Enter/Ctrl+Enter 立即发送 / Shift+Enter 换行；
+ *      传 directSend:false 恢复旧模式（Enter 加入队列 / Ctrl+Enter 直接发送）；
  *      Home-End 行级 / Ctrl+Home-End 文档级 / IME 输入法保护
- *   3. 队列：常驻悬浮（localStorage 持久化），条目可编辑，批量发送
+ *   3. 队列：常驻悬浮（localStorage 持久化），条目可编辑，批量发送（directSend:false 时启用）
  *   4. 对话面板：IM（左 AI 回复/右用户消息 + 状态标签），左侧索引（直接/组件分组），
  *      底部直接发消息，自动滚动到最新，完整回复展示
  *   5. 任务状态：发送后 等待调度/处理中/已完成 三态
@@ -22,7 +24,10 @@
 
   // API 前缀可配（2026-08-22）：开源 server.py 用 /api/feedback；
   // 接入 vibe-astock 本地后端（/api/ui-feedback 系）时传 apiPrefix: "/api/ui-feedback"
-  var cfg = { endpoint: DEFAULT_ENDPOINT, apiPrefix: "/api/feedback" };
+  // directSend 默认 true：点发送/Enter 立即 POST，不再进入待发送队列；
+  // 传 directSend:false 可恢复旧的「加入队列 → 批量发送」模式。
+  var cfg = { endpoint: DEFAULT_ENDPOINT, apiPrefix: "/api/feedback", directSend: true };
+  function isDirectSend() { return cfg.directSend !== false; }
   // 2026-08-22 修复：去掉多余斜杠——api("/") 曾拼出 /api/ui-feedback/ 尾斜杠 → POST 405 发送失败
   function api(path) {
     var p = (path || "").replace(/^\/+/, "").replace(/\/+$/, "");
@@ -74,9 +79,14 @@
         .catch(function () {});
     }
   }
-  function post(url, body, cb) {
+  function post(url, body, cb, errCb) {
     fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-      .then(function (r) { return r.json(); }).then(cb).catch(function () {});
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(cb)
+      .catch(function (e) { if (errCb) errCb(e); });
   }
 
   /* ================= 玻璃风样式（100% 对齐项目 index.css token，2026-08-22） ================= */
@@ -237,10 +247,11 @@
     ta.value = "";
     note = "";
     m.classList.remove("hidden");
-    // 打开时同步按钮 disabled（备注为空禁用提交）
-    var add = $("[data-pc-add]", m), sd = $("[data-pc-sendd]", m);
-    if (add) { add.disabled = true; add.style.opacity = ".5"; }
-    if (sd) { sd.disabled = true; sd.style.opacity = ".5"; }
+    // 打开时同步按钮 disabled（备注为空禁用提交）；按钮集合随 directSend 模式不同
+    ["[data-pc-sendnow]", "[data-pc-sendd]", "[data-pc-add]"].forEach(function (sel) {
+      var b = $(sel, m);
+      if (b) { b.disabled = true; b.style.opacity = ".5"; }
+    });
     ta.focus();
   }
   function closeNoteDialog() { $("[data-pokechat='note']").classList.add("hidden"); picked = null; clearOutline(); }
@@ -258,15 +269,27 @@
     var ta = $("[data-pokechat='note'] [data-pc-note]");
     var v = ta ? (ta.value || "") : (note || "");
     if (!picked || !v.trim()) return;
-    sendFeedback([{ path: location.pathname + location.search, selector: picked.selector, text: picked.text, note: v, name: picked.name }]);
-    closeNoteDialog();
+    // directSend：发送成功才关闭弹窗；失败保留输入，避免用户丢内容
+    sendFeedback([{ path: location.pathname + location.search, selector: picked.selector, text: picked.text, note: v, name: picked.name }], {
+      onSuccess: closeNoteDialog
+    });
   }
-  function sendFeedback(items) {
+  function sendFeedback(items, callbacks) {
+    var cbs = callbacks || {};
     if (hasBackend()) {
-      post(api("/"), { items: items }, function () { refreshStatus(); toast("已发送给 AI，等待处理"); });
+      post(api("/"), { items: items }, function () {
+        refreshStatus();
+        toast("已发送，等待 AI 处理");
+        if (cbs.onSuccess) cbs.onSuccess();
+      }, function () {
+        // 失败只提示，不落队列、不静默丢内容
+        toast("发送失败，请检查反馈服务");
+        if (cbs.onError) cbs.onError();
+      });
     } else {
       items.forEach(function (it) { queue.push({ path: it.path, selector: it.selector, text: it.text, note: it.note, name: it.name, ts: Date.now(), local: true }); });
       saveQueue(); renderFloating(); toast("本地模式：已记录在 localStorage");
+      if (cbs.onSuccess) cbs.onSuccess();
     }
   }
 
@@ -345,7 +368,7 @@
     var items = queue.map(function (q) { return { path: q.path, selector: q.selector, text: q.text, note: q.note, name: q.name }; });
     userScrolledAway = false;  // 2026-08-22：批量发送后自动到底部
     if (hasBackend()) {
-      post(api("/"), { items: items }, function () { queue = []; saveQueue(); renderFloating(); refreshStatus(); toast("已发送 " + items.length + " 条反馈，等待 AI 处理"); });
+      post(api("/"), { items: items }, function () { queue = []; saveQueue(); renderFloating(); refreshStatus(); toast("已发送 " + items.length + " 条反馈，等待 AI 处理"); }, function () { toast("发送失败，请检查反馈服务"); });
     } else {
       toast("本地模式：未配置 endpoint，队列保留在 localStorage");
       qOpen = false; renderQueueDialog();
@@ -379,7 +402,7 @@
     var row = el("div", null);
     row.style.cssText = "display:flex;align-items:center;gap:8px;";
     var queueBtn = el("button", "pc-btn pc-btn-primary pc-glass", null);
-    queueBtn.innerHTML = "<span data-pc-flabel>反馈队列</span>";  // 2026-08-22：固定 label 节点，渲染只改文本不重建
+    queueBtn.innerHTML = "<span data-pc-flabel>" + (isDirectSend() ? "反馈对话" : "反馈队列") + "</span>";  // 2026-08-22：固定 label 节点，渲染只改文本不重建
     queueBtn.style.cssText = "background:var(--pc-primary);color:#fff;border-radius:999px;padding:8px 14px;font-weight:700;font-size:12px;";
     queueBtn.onclick = function () {
       qOpen = !qOpen;
@@ -466,24 +489,30 @@
       '    <div>名称：<span style="font-family:monospace;color:hsl(222 45% 12%);font-weight:600;" data-pc-name></span></div>' +
       '    <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title=""><span>内容：</span><span data-pc-txt></span></div>' +
       '  </div>' +
-      '  <textarea data-pc-note rows="6" placeholder="备注：想怎么改？（如：把这里改成红色、加个筛选按钮…）Enter 提交，Shift+Enter 换行" style="margin-bottom:8px;resize:none;width:100%;box-sizing:border-box;' +
+      '  <textarea data-pc-note rows="6" placeholder="备注：想怎么改？（如：把这里改成红色、加个筛选按钮…）' + (isDirectSend() ? 'Enter 发送，Shift+Enter 换行' : 'Enter 加入队列，Shift+Enter 换行') + '" style="margin-bottom:8px;resize:none;width:100%;box-sizing:border-box;' +
       '    background:rgba(255,255,255,.75); color:hsl(222 45% 12%); border:1px solid rgba(0,0,0,.15); border-radius:9px; padding:8px 10px; font-size:13px; outline:none;"></textarea>' +
       '  <div style="display:flex;justify-content:flex-end;gap:8px;">' +
       '    <button data-pc-cancel style="background:none;border:none;color:hsl(222 20% 35%);cursor:pointer;padding:6px 12px;font-size:13px;">取消</button>' +
-      '    <button data-pc-sendd style="border:1px solid var(--pc-primary);color:var(--pc-primary);background:rgba(255,255,255,.5);border-radius:9px;padding:6px 12px;cursor:pointer;font-size:13px;" title="Ctrl+Enter">直接发送（Ctrl+Enter）</button>' +
-      '    <button data-pc-add style="background:var(--pc-primary);color:#fff;font-weight:600;border:none;border-radius:9px;padding:6px 14px;cursor:pointer;font-size:13px;" title="Enter">加入队列（Enter）</button>' +
+      (isDirectSend()
+        ? '    <button data-pc-sendnow style="background:var(--pc-primary);color:#fff;font-weight:600;border:none;border-radius:9px;padding:6px 14px;cursor:pointer;font-size:13px;" title="Enter">发送（Enter）</button>'
+        : '    <button data-pc-sendd style="border:1px solid var(--pc-primary);color:var(--pc-primary);background:rgba(255,255,255,.5);border-radius:9px;padding:6px 12px;cursor:pointer;font-size:13px;" title="Ctrl+Enter">直接发送（Ctrl+Enter）</button>' +
+          '    <button data-pc-add style="background:var(--pc-primary);color:#fff;font-weight:600;border:none;border-radius:9px;padding:6px 14px;cursor:pointer;font-size:13px;" title="Enter">加入队列（Enter）</button>') +
       '  </div>' +
       '</div>';
     $("[data-pc-cancel]", m).onclick = closeNoteDialog;
     $("[data-pc-close]", m).onclick = closeNoteDialog;
-    $("[data-pc-add]", m).onclick = addToQueue;
-    $("[data-pc-sendd]", m).onclick = sendDirectFromDialog;
-    function syncBtns() {  // 对齐项目版 disabled 逻辑：备注为空时两个提交按钮禁用
+    var addBtn = $("[data-pc-add]", m);
+    if (addBtn) addBtn.onclick = addToQueue;
+    var senddBtn = $("[data-pc-sendd]", m);
+    if (senddBtn) senddBtn.onclick = sendDirectFromDialog;
+    var sendNowBtn = $("[data-pc-sendnow]", m);
+    if (sendNowBtn) sendNowBtn.onclick = sendDirectFromDialog;
+    function syncBtns() {  // 备注为空时禁用提交按钮（两种模式按钮集合不同）
       var has = note.trim().length > 0;
-      $("[data-pc-add]", m).disabled = !has;
-      $("[data-pc-sendd]", m).disabled = !has;
-      $("[data-pc-add]", m).style.opacity = has ? "1" : ".5";
-      $("[data-pc-sendd]", m).style.opacity = has ? "1" : ".5";
+      ["[data-pc-sendnow]", "[data-pc-sendd]", "[data-pc-add]"].forEach(function (sel) {
+        var b = $(sel, m);
+        if (b) { b.disabled = !has; b.style.opacity = has ? "1" : ".5"; }
+      });
     }
     var ta = $("[data-pc-note]", m);
     ta.addEventListener("input", function () { note = ta.value; syncBtns(); });
@@ -500,7 +529,9 @@
         e.preventDefault();
         if (e.ctrlKey || e.metaKey) elNode.selectionStart = elNode.selectionEnd = elNode.value.length;
         else { var nl = elNode.value.indexOf("\n", elNode.selectionStart); elNode.selectionStart = elNode.selectionEnd = nl === -1 ? elNode.value.length : nl; }
-      } else if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); if (note.trim()) sendDirectFromDialog(); }
+      } else if (e.key === "Enter" && (e.ctrlKey || (isDirectSend() && !e.shiftKey))) {
+        e.preventDefault(); if (note.trim()) sendDirectFromDialog();
+      }
       else if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (note.trim()) addToQueue(); }
     });
     document.body.appendChild(m);
@@ -610,9 +641,13 @@
     var m = directMsg.trim();
     if (!m) return;
     userScrolledAway = false;  // 2026-08-22：发消息后自动到底部
-    sendFeedback([{ path: location.pathname + location.search, selector: "", text: "", note: m }]);
-    directMsg = "";
-    $("[data-pc-dmsg]").value = "";
+    sendFeedback([{ path: location.pathname + location.search, selector: "", text: "", note: m }], {
+      onSuccess: function () {
+        directMsg = "";
+        var input = $("[data-pc-dmsg]");
+        if (input) input.value = "";
+      }
+    });
   }
 
   /* ================= 主题设置（2026-08-22 用户纠正：**IM 自己的主题**） ================= */
@@ -725,7 +760,7 @@
     if (!qb) return;
     // 2026-08-22（评审优化）：固定 label 节点只改文本，不再摘/放 ping 点
     var label = qb.querySelector("[data-pc-flabel]");
-    if (label) label.textContent = queue.length ? "反馈队列（" + queue.length + "）" : "反馈队列";
+    if (label) label.textContent = isDirectSend() ? "反馈对话" : (queue.length ? "反馈队列（" + queue.length + "）" : "反馈队列");
     var dot = qb.querySelector("[data-pc-qdot]");
     var running = (status.pending ? status.pending.length : 0) + (status.processing ? status.processing.length : 0);
     if (dot) dot.style.display = running > 0 ? "inline-block" : "none";
@@ -775,12 +810,12 @@
     var body = $("[data-pc-body]", d);
     body.innerHTML = "";
     var convo2 = status.done.concat(status.processing, status.pending).sort(function (a, b) { return String(a.ts).localeCompare(String(b.ts)); });
-    if (!convo2.length && !queue.length) {
+    if (!convo2.length && (isDirectSend() || !queue.length)) {
       body.innerHTML = "<p style='text-align:center;color:var(--pc-muted);padding:50px 0;font-size:13px'>暂无记录，点 🎯 选个组件试试</p>";
     }
-    // 待发送区（独立条，在发送框上方）
+    // 待发送区（独立条，在发送框上方）；directSend 模式不显示队列，也不再出现「待发送（0）」
     var pend = $("[data-pc-pend]", d);
-    if (queue.length) {
+    if (!isDirectSend() && queue.length) {
       pend.style.display = "block";
       pend.innerHTML =
         "<div style='font-size:11px;font-weight:700;color:var(--pc-muted);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;'>" +
@@ -885,7 +920,8 @@
   function toast(msg) {
     var t = el("div", "pc-glass", null);
     t.setAttribute("data-pokechat", "");
-    t.style.cssText = "position:fixed;bottom:140px;left:50%;transform:translateX(-50%);z-index:2000;padding:8px 16px;font-size:13px;background:rgba(17,28,46,.92);";
+    // z-index 高于弹窗（2147483002）：发送失败时弹窗保持打开，提示也必须可见
+    t.style.cssText = "position:fixed;bottom:140px;left:50%;transform:translateX(-50%);z-index:2147483003;padding:8px 16px;font-size:13px;background:rgba(17,28,46,.92);";
     t.textContent = msg;
     document.body.appendChild(t);
     setTimeout(function () { t.remove(); }, 2500);
@@ -914,7 +950,7 @@
   function doInit(config) {
     if (inited) return;
     inited = true;
-    cfg = Object.assign({ endpoint: DEFAULT_ENDPOINT, apiPrefix: "/api/feedback" }, config || {});
+    cfg = Object.assign({ endpoint: DEFAULT_ENDPOINT, apiPrefix: "/api/feedback", directSend: true }, config || {});
     loadQueue();
     buildUI();
     buildThemeDialog();
